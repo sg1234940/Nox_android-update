@@ -1,8 +1,9 @@
 {
   "app": "Nox",
-  "versionCode": 1,
-  "versionName": "1.0.0",
-  "downloadUrl": "",
-  "releaseNotes": "Initial updater configuration",
+  "versionCode": 4,
+  "versionName": "1.0.3",
+  "downloadUrlA": "https://github.com/sg1234940/Nox_android-update/releases/download/v1.0.3/nox-a.apk",
+  "downloadUrlB": "https://github.com/sg1234940/Nox_android-update/releases/download/v1.0.3/nox-b.apk",
+  "releaseNotes": "Nox v1.0.3",
   "mandatory": false
 }
