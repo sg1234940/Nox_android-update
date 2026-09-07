@@ -1,9 +1,9 @@
 {
   "app": "Nox",
-  "versionCode": 4,
-  "versionName": "1.0.3",
-  "downloadUrlA": "https://github.com/sg1234940/Nox_android-update/releases/download/v1.0.3/nox-a.apk",
-  "downloadUrlB": "https://github.com/sg1234940/Nox_android-update/releases/download/v1.0.3/nox-b.apk",
-  "releaseNotes": "Nox v1.0.3",
+  "versionCode": 5,
+  "versionName": "1.0.4",
+  "downloadUrlA": "https://github.com/sg1234940/Nox_android-update/releases/download/v1.0.4/app-noxA-release.apk",
+  "downloadUrlB": "https://github.com/sg1234940/Nox_android-update/releases/download/v1.0.4/app-noxB-release.apk",
+  "releaseNotes": "Nox v1.0.4 — stabilna wersja Android A/B, przygotowana do testu aktualizacji z v1.0.3 bez odinstalowywania aplikacji.",
   "mandatory": false
 }
