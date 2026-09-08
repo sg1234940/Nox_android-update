@@ -1,9 +1,9 @@
 {
   "app": "Nox",
-  "versionCode": 12,
-  "versionName": "1.0.11",
-  "downloadUrlA": "https://github.com/sg1234940/Nox_android-update/releases/download/v1.0.11/app-noxA-release.apk",
-  "downloadUrlB": "https://github.com/sg1234940/Nox_android-update/releases/download/v1.0.11/app-noxB-release.apk",
-  "releaseNotes": "Nox 1.0.11 — aktualizacja OTA A/B i poprawiony przepływ instalacji.",
+  "versionCode": 13,
+  "versionName": "1.0.12",
+  "downloadUrlA": "https://github.com/sg1234940/Nox_android-update/releases/download/v1.0.12/app-noxA-release.apk",
+  "downloadUrlB": "https://github.com/sg1234940/Nox_android-update/releases/download/v1.0.12/app-noxB-release.apk",
+  "releaseNotes": "Nox 1.0.12 — stabilny Nox A + Iskra, wspólny interfejs, pamięć i historia, foldery z podfolderami, poprawki klawiatury oraz przełączniki agentów.",
   "mandatory": false
 }
