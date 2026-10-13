@@ -1,7 +1,6 @@
 package com.iskra.vosklab
 
-import com.iskra.vosklab.metrics.DiagnosticTimestamps
-import com.iskra.vosklab.metrics.RecognitionMetrics
+import com.iskra.vosklab.metrics.RecordingSessionState
 import com.iskra.vosklab.metrics.TextMetrics
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -54,78 +53,98 @@ class TextMetricsTest {
     }
 
     @Test
-    fun testRealStreamingRuntimeTimestampLifecycleOrdering() {
-        val now = System.currentTimeMillis()
-        val timestamps = DiagnosticTimestamps(
-            micStartMs = now,
-            firstPcmMs = now + 50,
-            speechOnsetMs = now + 200,
-            firstPartialMs = now + 400,
-            firstWordMs = now + 500,
-            stopMs = now + 1200,
-            finalMs = now + 1250
-        )
+    fun testRecordingSessionStateLifecycleContractAndOrdering() {
+        val state = RecordingSessionState()
 
-        val metrics = RecognitionMetrics(
-            timestamps = timestamps,
-            micStartupMs = timestamps.firstPcmMs - timestamps.micStartMs,
-            speechOnsetDelayMs = timestamps.speechOnsetMs - timestamps.micStartMs,
-            firstPartialLatencyMs = timestamps.firstPartialMs - timestamps.micStartMs,
-            firstWordLatencyMs = timestamps.firstWordMs - timestamps.micStartMs,
-            totalRecognitionTimeMs = timestamps.finalMs - timestamps.micStartMs,
-            audioDurationMs = 1200L,
-            rtf = (timestamps.finalMs - timestamps.micStartMs).toFloat() / 1200f
-        )
+        val t0 = 1000L
+        val t1 = 1050L
+        val t2 = 1200L
+        val t3 = 1400L
+        val t4 = 1500L
+        val t5 = 2200L
+        val t6 = 2250L
 
-        // Actual runtime sequence: MIC_START <= FIRST_PCM <= SPEECH_ONSET <= FIRST_PARTIAL <= FIRST_WORD <= STOP <= FINAL
-        assertTrue(timestamps.micStartMs <= timestamps.firstPcmMs)
-        assertTrue(timestamps.firstPcmMs <= timestamps.speechOnsetMs)
-        assertTrue(timestamps.speechOnsetMs <= timestamps.firstPartialMs)
-        assertTrue(timestamps.firstPartialMs <= timestamps.firstWordMs)
-        assertTrue(timestamps.firstWordMs <= timestamps.stopMs)
-        assertTrue(timestamps.stopMs <= timestamps.finalMs)
+        state.recordMicStart(t0)
+        state.recordFirstPcm(t1)
+        state.recordSpeechOnset(t2)
+        state.recordFirstPartial(t3)
+        state.recordFirstWord(t4)
+        state.recordStop(t5)
+        state.recordFinal(t6)
 
-        assertEquals(50L, metrics.micStartupMs)
-        assertEquals(200L, metrics.speechOnsetDelayMs)
-        assertEquals(400L, metrics.firstPartialLatencyMs)
-        assertEquals(500L, metrics.firstWordLatencyMs)
-        assertEquals(1250L, metrics.totalRecognitionTimeMs)
-        assertEquals(1.0416f, metrics.rtf, 0.001f)
+        val ts = state.getDiagnosticTimestamps()
+
+        // Contract check: MIC_START <= FIRST_PCM <= SPEECH_ONSET <= FIRST_PARTIAL <= FIRST_WORD <= STOP <= FINAL
+        assertTrue(ts.micStartMs <= ts.firstPcmMs)
+        assertTrue(ts.firstPcmMs <= ts.speechOnsetMs)
+        assertTrue(ts.speechOnsetMs <= ts.firstPartialMs)
+        assertTrue(ts.firstPartialMs <= ts.firstWordMs)
+        assertTrue(ts.firstWordMs <= ts.stopMs)
+        assertTrue(ts.stopMs <= ts.finalMs)
+
+        assertEquals(t0, ts.micStartMs)
+        assertEquals(t1, ts.firstPcmMs)
+        assertEquals(t2, ts.speechOnsetMs)
+        assertEquals(t3, ts.firstPartialMs)
+        assertEquals(t4, ts.firstWordMs)
+        assertEquals(t5, ts.stopMs)
+        assertEquals(t6, ts.finalMs)
     }
 
     @Test
-    fun testUnobservedPartialAndFirstWordRemainZeroAndUnknown() {
-        val now = System.currentTimeMillis()
-        val timestamps = DiagnosticTimestamps(
-            micStartMs = now,
-            firstPcmMs = now + 50,
-            speechOnsetMs = 0L,      // Silence - no speech
-            firstPartialMs = 0L,     // Unobserved
-            firstWordMs = 0L,        // Unobserved
-            stopMs = now + 1000,
-            finalMs = now + 1050
-        )
+    fun testRecordingSessionStateFirstTimestampsSetOnlyOnce() {
+        val state = RecordingSessionState()
 
-        val metrics = RecognitionMetrics(
-            timestamps = timestamps,
-            micStartupMs = timestamps.firstPcmMs - timestamps.micStartMs,
-            speechOnsetDelayMs = if (timestamps.speechOnsetMs > 0) timestamps.speechOnsetMs - timestamps.micStartMs else 0L,
-            firstPartialLatencyMs = if (timestamps.firstPartialMs > 0) timestamps.firstPartialMs - timestamps.micStartMs else 0L,
-            firstWordLatencyMs = if (timestamps.firstWordMs > 0) timestamps.firstWordMs - timestamps.micStartMs else 0L,
-            totalRecognitionTimeMs = timestamps.finalMs - timestamps.micStartMs,
-            audioDurationMs = 1000L,
-            rtf = 1.05f
-        )
+        state.recordFirstPartial(100L)
+        state.recordFirstPartial(200L)
 
-        assertEquals(0L, timestamps.firstPartialMs)
-        assertEquals(0L, timestamps.firstWordMs)
-        assertEquals(0L, metrics.firstPartialLatencyMs)
-        assertEquals(0L, metrics.firstWordLatencyMs)
+        state.recordFirstWord(150L)
+        state.recordFirstWord(300L)
 
-        val partialDisplay = if (metrics.firstPartialLatencyMs > 0) "${metrics.firstPartialLatencyMs} ms" else "UNKNOWN"
-        val wordDisplay = if (metrics.firstWordLatencyMs > 0) "${metrics.firstWordLatencyMs} ms" else "UNKNOWN"
+        val ts = state.getDiagnosticTimestamps()
+        assertEquals(100L, ts.firstPartialMs)
+        assertEquals(150L, ts.firstWordMs)
+    }
 
-        assertEquals("UNKNOWN", partialDisplay)
-        assertEquals("UNKNOWN", wordDisplay)
+    @Test
+    fun testRecordingSessionStateUnobservedRemainZero() {
+        val state = RecordingSessionState()
+
+        state.recordMicStart(1000L)
+        state.recordFirstPcm(1050L)
+        state.recordStop(2000L)
+        state.recordFinal(2050L)
+
+        val ts = state.getDiagnosticTimestamps()
+
+        assertEquals(0L, ts.speechOnsetMs)
+        assertEquals(0L, ts.firstPartialMs)
+        assertEquals(0L, ts.firstWordMs)
+
+        val partialLat = if (ts.firstPartialMs > 0 && ts.micStartMs > 0) "${ts.firstPartialMs - ts.micStartMs} ms" else "UNKNOWN"
+        val wordLat = if (ts.firstWordMs > 0 && ts.micStartMs > 0) "${ts.firstWordMs - ts.micStartMs} ms" else "UNKNOWN"
+
+        assertEquals("UNKNOWN", partialLat)
+        assertEquals("UNKNOWN", wordLat)
+    }
+
+    @Test
+    fun testFirstPartialFirstWordPreservedEvenIfUiUpdateIsDelayed() {
+        val state = RecordingSessionState()
+
+        // Simulate audio recognition thread finding partial and word
+        state.recordMicStart(1000L)
+        state.recordFirstPcm(1050L)
+        state.recordFirstPartial(1300L)
+        state.recordFirstWord(1400L)
+
+        // Simulate UI delay (e.g., UI observer hasn't read or UI thread mainHandler.post was queued)
+        // UI snapshot taken later
+        val snapshot = state.getDiagnosticTimestamps()
+        val uiSnapshotFirstPartial = snapshot.firstPartialMs
+        val uiSnapshotFirstWord = snapshot.firstWordMs
+
+        assertEquals(1300L, uiSnapshotFirstPartial)
+        assertEquals(1400L, uiSnapshotFirstWord)
     }
 }
