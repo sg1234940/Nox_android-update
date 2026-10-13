@@ -18,6 +18,7 @@ import com.iskra.vosklab.data.RecordingRepository
 import com.iskra.vosklab.metrics.DiagnosticTimestamps
 import com.iskra.vosklab.metrics.PerformanceProfiler
 import com.iskra.vosklab.metrics.RecognitionMetrics
+import com.iskra.vosklab.metrics.RecordingSessionState
 import com.iskra.vosklab.personalization.PostProcessingPipeline
 import com.iskra.vosklab.vosk.VoskEngineManager
 import kotlinx.coroutines.Dispatchers
@@ -45,14 +46,8 @@ fun LabScreen(
     var estimatedSnrDb by remember { mutableFloatStateOf(0f) }
     var audioDurationMs by remember { mutableLongStateOf(0L) }
 
-    var micStartMs by remember { mutableLongStateOf(0L) }
-    var firstPcmMs by remember { mutableLongStateOf(0L) }
-    var speechOnsetMs by remember { mutableLongStateOf(0L) }
-    var firstPartialMs by remember { mutableLongStateOf(0L) }
-    var firstWordMs by remember { mutableLongStateOf(0L) }
-    var finalMs by remember { mutableLongStateOf(0L) }
-    var stopMs by remember { mutableLongStateOf(0L) }
-
+    var activeSessionState by remember { mutableStateOf<RecordingSessionState?>(null) }
+    var displayTimestamps by remember { mutableStateOf(DiagnosticTimestamps()) }
     var heapUsageMb by remember { mutableFloatStateOf(0f) }
 
     val audioRecorder = remember { AudioRecorder() }
@@ -110,24 +105,31 @@ fun LabScreen(
                                 currentRawTranscript = ""
                                 currentProcessedTranscript = ""
 
-                                firstPartialMs = 0L
-                                firstWordMs = 0L
-                                finalMs = 0L
+                                val sessionState = RecordingSessionState()
+                                activeSessionState = sessionState
+                                displayTimestamps = DiagnosticTimestamps()
 
                                 audioRecorder.startRecording(
                                     outputFile = file,
+                                    sessionState = sessionState,
                                     listener = object : AudioRecorder.AudioFrameListener {
                                         override fun onAudioFrame(buffer: ShortArray, readSize: Int, frameRmsDb: Float, timestampMs: Long) {
+                                            val acceptStart = System.currentTimeMillis()
                                             val partial = voskEngineManager.acceptWaveform(buffer, readSize)
+                                            val acceptDuration = System.currentTimeMillis() - acceptStart
+                                            sessionState.addVoskProcessingTime(acceptDuration)
+
+                                            if (partial.isNotBlank()) {
+                                                sessionState.recordFirstPartial(timestampMs)
+                                                if (partial.trim().isNotEmpty()) {
+                                                    sessionState.recordFirstWord(timestampMs)
+                                                }
+                                            }
+
                                             mainHandler.post {
                                                 currentRmsDb = frameRmsDb
+                                                displayTimestamps = sessionState.getDiagnosticTimestamps()
                                                 if (partial.isNotBlank()) {
-                                                    if (firstPartialMs == 0L) {
-                                                        firstPartialMs = timestampMs
-                                                    }
-                                                    if (firstWordMs == 0L && partial.trim().isNotEmpty()) {
-                                                        firstWordMs = timestampMs
-                                                    }
                                                     currentRawTranscript = partial
                                                     currentProcessedTranscript = postProcessingPipeline.applyPostProcessing(partial)
                                                 }
@@ -137,45 +139,34 @@ fun LabScreen(
                                 )
 
                                 isRecording = true
-                                micStartMs = audioRecorder.micStartMs
                             } else {
                                 isProcessing = true
+                                val sessionState = activeSessionState ?: RecordingSessionState()
                                 audioRecorder.stopRecording()
                                 isRecording = false
-
-                                micStartMs = audioRecorder.micStartMs
-                                firstPcmMs = audioRecorder.firstPcmMs
-                                speechOnsetMs = audioRecorder.speechOnsetMs
-                                stopMs = audioRecorder.stopMs
 
                                 coroutineScope.launch {
                                     withContext(Dispatchers.IO) {
                                         currentAudioFile?.let { wavFile ->
+                                            val finalStart = System.currentTimeMillis()
                                             val finalResult = voskEngineManager.getFinalResult()
                                             val endFinalTime = System.currentTimeMillis()
+                                            sessionState.addVoskProcessingTime(endFinalTime - finalStart)
+                                            sessionState.recordFinal(endFinalTime)
 
+                                            val timestamps = sessionState.getDiagnosticTimestamps()
                                             val analysis = audioRecorder.analyzeAudioFile(wavFile)
                                             val audioDur = analysis.durationMs
                                             val processedText = postProcessingPipeline.applyPostProcessing(finalResult)
 
-                                            val finalTime = endFinalTime
+                                            val micStartup = if (timestamps.firstPcmMs > 0 && timestamps.micStartMs > 0) maxOf(0L, timestamps.firstPcmMs - timestamps.micStartMs) else 0L
+                                            val speechDelay = if (timestamps.speechOnsetMs > 0 && timestamps.micStartMs > 0) maxOf(0L, timestamps.speechOnsetMs - timestamps.micStartMs) else 0L
+                                            val partialLat = if (timestamps.firstPartialMs > 0 && timestamps.micStartMs > 0) maxOf(0L, timestamps.firstPartialMs - timestamps.micStartMs) else 0L
+                                            val wordLat = if (timestamps.firstWordMs > 0 && timestamps.micStartMs > 0) maxOf(0L, timestamps.firstWordMs - timestamps.micStartMs) else 0L
+                                            val totalRecMs = if (timestamps.finalMs > 0 && timestamps.micStartMs > 0) maxOf(0L, timestamps.finalMs - timestamps.micStartMs) else 0L
 
-                                            val micStartup = if (firstPcmMs > 0 && micStartMs > 0) maxOf(0L, firstPcmMs - micStartMs) else 0L
-                                            val speechDelay = if (speechOnsetMs > 0 && micStartMs > 0) maxOf(0L, speechOnsetMs - micStartMs) else 0L
-                                            val partialLat = if (firstPartialMs > 0 && micStartMs > 0) maxOf(0L, firstPartialMs - micStartMs) else 0L
-                                            val wordLat = if (firstWordMs > 0 && micStartMs > 0) maxOf(0L, firstWordMs - micStartMs) else 0L
-                                            val totalRecMs = if (finalTime > 0 && micStartMs > 0) maxOf(0L, finalTime - micStartMs) else 0L
-                                            val rtfVal = if (audioDur > 0) totalRecMs.toFloat() / audioDur.toFloat() else 0f
-
-                                            val timestamps = DiagnosticTimestamps(
-                                                micStartMs = micStartMs,
-                                                firstPcmMs = firstPcmMs,
-                                                speechOnsetMs = speechOnsetMs,
-                                                firstPartialMs = firstPartialMs,
-                                                firstWordMs = firstWordMs,
-                                                finalMs = finalTime,
-                                                stopMs = stopMs
-                                            )
+                                            val voskCpuProcessingMs = sessionState.voskProcessingTimeMs
+                                            val streamingRtf = if (audioDur > 0) voskCpuProcessingMs.toFloat() / audioDur.toFloat() else 0f
 
                                             val metrics = RecognitionMetrics(
                                                 timestamps = timestamps,
@@ -185,7 +176,7 @@ fun LabScreen(
                                                 firstWordLatencyMs = wordLat,
                                                 totalRecognitionTimeMs = totalRecMs,
                                                 audioDurationMs = audioDur,
-                                                rtf = rtfVal,
+                                                rtf = streamingRtf,
                                                 snrDb = analysis.snrDb
                                             )
 
@@ -202,7 +193,7 @@ fun LabScreen(
                                             repository.saveRecording(item)
 
                                             withContext(Dispatchers.Main) {
-                                                finalMs = finalTime
+                                                displayTimestamps = timestamps
                                                 currentRawTranscript = finalResult
                                                 currentProcessedTranscript = processedText
                                                 audioDurationMs = audioDur
@@ -268,11 +259,12 @@ fun LabScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val micStartup = if (firstPcmMs > 0 && micStartMs > 0) "${firstPcmMs - micStartMs} ms" else "UNKNOWN"
-                val speechDelay = if (speechOnsetMs > 0 && micStartMs > 0) "${speechOnsetMs - micStartMs} ms" else "UNKNOWN"
-                val partialLat = if (firstPartialMs > 0 && micStartMs > 0) "${firstPartialMs - micStartMs} ms" else "UNKNOWN"
-                val wordLat = if (firstWordMs > 0 && micStartMs > 0) "${firstWordMs - micStartMs} ms" else "UNKNOWN"
-                val totalMs = if (finalMs > 0 && micStartMs > 0) "${finalMs - micStartMs} ms" else "UNKNOWN"
+                val ts = displayTimestamps
+                val micStartup = if (ts.firstPcmMs > 0 && ts.micStartMs > 0) "${ts.firstPcmMs - ts.micStartMs} ms" else "UNKNOWN"
+                val speechDelay = if (ts.speechOnsetMs > 0 && ts.micStartMs > 0) "${ts.speechOnsetMs - ts.micStartMs} ms" else "UNKNOWN"
+                val partialLat = if (ts.firstPartialMs > 0 && ts.micStartMs > 0) "${ts.firstPartialMs - ts.micStartMs} ms" else "UNKNOWN"
+                val wordLat = if (ts.firstWordMs > 0 && ts.micStartMs > 0) "${ts.firstWordMs - ts.micStartMs} ms" else "UNKNOWN"
+                val totalMs = if (ts.finalMs > 0 && ts.micStartMs > 0) "${ts.finalMs - ts.micStartMs} ms" else "UNKNOWN"
 
                 Text(text = "Start mikrofonu (MIC_START -> FIRST_PCM): $micStartup")
                 Text(text = "Początek mowy (SPEECH_ONSET): $speechDelay")
