@@ -6,6 +6,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.iskra.vosklab.personalization.DictionaryReplacement
 import com.iskra.vosklab.personalization.PostProcessingPipeline
@@ -15,6 +16,7 @@ import com.iskra.vosklab.personalization.ProperNounRule
 fun PersonalizationScreen(
     postProcessingPipeline: PostProcessingPipeline
 ) {
+    val context = LocalContext.current
     var config by remember { mutableStateOf(postProcessingPipeline.config) }
 
     var newTrigger by remember { mutableStateOf("") }
@@ -24,6 +26,12 @@ fun PersonalizationScreen(
     var newCapitalized by remember { mutableStateOf("") }
 
     val scrollState = rememberScrollState()
+
+    fun updateConfigAndSave(newConfig: com.iskra.vosklab.personalization.PersonalizationConfig) {
+        config = newConfig
+        postProcessingPipeline.config = newConfig
+        postProcessingPipeline.saveToStorage(context)
+    }
 
     Column(
         modifier = Modifier
@@ -43,8 +51,9 @@ fun PersonalizationScreen(
                     text = "Mechanizm A: Post-Processing i Reguły Tekstowe",
                     style = MaterialTheme.typography.titleMedium
                 )
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Lokalna korekcja transkrypcji w czasie rzeczywistym bez modyfikacji wag modelu Vosk.",
+                    text = "Lokalna korekcja transkrypcji w czasie rzeczywistym bez modyfikacji wag modelu Vosk (post-processing).",
                     style = MaterialTheme.typography.bodySmall
                 )
 
@@ -58,8 +67,7 @@ fun PersonalizationScreen(
                     Switch(
                         checked = config.enabled,
                         onCheckedChange = {
-                            config = config.copy(enabled = it)
-                            postProcessingPipeline.config = config
+                            updateConfigAndSave(config.copy(enabled = it))
                         }
                     )
                 }
@@ -82,8 +90,7 @@ fun PersonalizationScreen(
                         Text("${rule.trigger} -> ${rule.replacement}")
                         TextButton(onClick = {
                             val updatedList = config.customDictionary - rule
-                            config = config.copy(customDictionary = updatedList)
-                            postProcessingPipeline.config = config
+                            updateConfigAndSave(config.copy(customDictionary = updatedList))
                         }) {
                             Text("Usuń")
                         }
@@ -111,8 +118,7 @@ fun PersonalizationScreen(
                     onClick = {
                         if (newTrigger.isNotBlank() && newReplacement.isNotBlank()) {
                             val newList = config.customDictionary + DictionaryReplacement(newTrigger.trim(), newReplacement.trim())
-                            config = config.copy(customDictionary = newList)
-                            postProcessingPipeline.config = config
+                            updateConfigAndSave(config.copy(customDictionary = newList))
                             newTrigger = ""
                             newReplacement = ""
                         }
@@ -140,8 +146,7 @@ fun PersonalizationScreen(
                         Text("${noun.word} -> ${noun.capitalizedWord}")
                         TextButton(onClick = {
                             val updatedList = config.properNouns - noun
-                            config = config.copy(properNouns = updatedList)
-                            postProcessingPipeline.config = config
+                            updateConfigAndSave(config.copy(properNouns = updatedList))
                         }) {
                             Text("Usuń")
                         }
@@ -169,8 +174,7 @@ fun PersonalizationScreen(
                     onClick = {
                         if (newNoun.isNotBlank() && newCapitalized.isNotBlank()) {
                             val newList = config.properNouns + ProperNounRule(newNoun.trim(), newCapitalized.trim())
-                            config = config.copy(properNouns = newList)
-                            postProcessingPipeline.config = config
+                            updateConfigAndSave(config.copy(properNouns = newList))
                             newNoun = ""
                             newCapitalized = ""
                         }

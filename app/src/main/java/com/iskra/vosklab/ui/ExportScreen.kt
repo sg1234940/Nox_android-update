@@ -7,6 +7,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.iskra.vosklab.data.RecordingRepository
 import com.iskra.vosklab.personalization.DatasetExporter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
@@ -14,7 +17,9 @@ fun ExportScreen(
     repository: RecordingRepository,
     contextFilesDir: File
 ) {
+    val coroutineScope = rememberCoroutineScope()
     val recordings = remember { repository.getAllRecordings() }
+
     var exportKaldi by remember { mutableStateOf(true) }
     var exportStatusMessage by remember { mutableStateOf("") }
     var isExporting by remember { mutableStateOf(false) }
@@ -50,22 +55,27 @@ fun ExportScreen(
                     enabled = !isExporting && recordings.isNotEmpty(),
                     onClick = {
                         isExporting = true
-                        val exportDir = File(contextFilesDir, "exports")
-                        val exporter = DatasetExporter(exportDir)
-                        val outputFile = File(exportDir, "iskra_vosklab_dataset_${System.currentTimeMillis()}.zip")
+                        exportStatusMessage = "Generowanie paczki eksportowej..."
+                        coroutineScope.launch {
+                            val exportDir = File(contextFilesDir, "exports")
+                            val exporter = DatasetExporter(exportDir)
+                            val outputFile = File(exportDir, "iskra_vosklab_dataset_${System.currentTimeMillis()}.zip")
 
-                        val success = exporter.exportDatasetZip(
-                            recordings = recordings,
-                            outputZipFile = outputFile,
-                            exportKaldiFormat = exportKaldi
-                        )
+                            val success = withContext(Dispatchers.IO) {
+                                exporter.exportDatasetZip(
+                                    recordings = recordings,
+                                    outputZipFile = outputFile,
+                                    exportKaldiFormat = exportKaldi
+                                )
+                            }
 
-                        if (success) {
-                            exportStatusMessage = "Pomyślnie wyeksportowano paczkę ZIP do:\n${outputFile.absolutePath}"
-                        } else {
-                            exportStatusMessage = "Błąd podczas generowania paczki eksportowej."
+                            if (success) {
+                                exportStatusMessage = "Pomyślnie wyeksportowano paczkę ZIP do:\n${outputFile.absolutePath}"
+                            } else {
+                                exportStatusMessage = "Błąd podczas generowania paczki eksportowej."
+                            }
+                            isExporting = false
                         }
-                        isExporting = false
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {

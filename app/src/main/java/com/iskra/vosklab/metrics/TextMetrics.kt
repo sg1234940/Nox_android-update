@@ -11,12 +11,26 @@ data class AlignmentResult(
     val errorRate: Float
 )
 
+data class DiagnosticTimestamps(
+    val micStartMs: Long = 0L,        // MIC_START
+    val firstPcmMs: Long = 0L,        // FIRST_PCM
+    val speechOnsetMs: Long = 0L,     // SPEECH_ONSET
+    val firstPartialMs: Long = 0L,    // FIRST_PARTIAL
+    val firstWordMs: Long = 0L,       // FIRST_WORD
+    val finalMs: Long = 0L,           // FINAL
+    val stopMs: Long = 0L             // STOP
+)
+
 data class RecognitionMetrics(
+    val timestamps: DiagnosticTimestamps = DiagnosticTimestamps(),
+    val micStartupMs: Long = 0L,
+    val speechOnsetDelayMs: Long = 0L,
+    val firstPartialLatencyMs: Long = 0L,
     val firstWordLatencyMs: Long = 0L,
     val totalRecognitionTimeMs: Long = 0L,
     val audioDurationMs: Long = 0L,
+    val rtf: Float = 0f,
     val snrDb: Float = 0f,
-    val droppedInitialWords: Boolean = false,
     val wer: Float = 0f,
     val cer: Float = 0f
 )

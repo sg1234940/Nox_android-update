@@ -13,23 +13,31 @@ data class RecognitionResult(
     val text: String,
     val partialText: String = "",
     val recognitionTimeMs: Long = 0L,
+    val audioDurationMs: Long = 0L,
+    val rtf: Float = 0f,
     val rawJson: String = ""
 )
 
-class VoskEngineManager(val context: Context) {
+class VoskEngineManager(val context: Context) : IVoskCore {
 
     private var currentModel: Model? = null
     private var currentRecognizer: Recognizer? = null
 
     private val _isModelLoaded = MutableStateFlow(false)
-    val isModelLoaded: StateFlow<Boolean> = _isModelLoaded
+    val isModelLoadedState: StateFlow<Boolean> = _isModelLoaded
 
-    private val _activeModelName = MutableStateFlow("Brak")
-    val activeModelName: StateFlow<String> = _activeModelName
+    private val _activeModelNameState = MutableStateFlow("Brak")
+    val activeModelNameState: StateFlow<String> = _activeModelNameState
 
-    fun isModelLoaded(): Boolean = currentModel != null
+    override val isLoaded: Boolean
+        get() = currentModel != null
 
-    fun loadModel(modelDir: File, sampleRate: Float = 16000f, grammarJson: String? = null) {
+    override val activeModelName: String
+        get() = _activeModelNameState.value
+
+    fun isModelLoaded(): Boolean = isLoaded
+
+    override fun loadModel(modelDir: File, sampleRate: Float, grammarJson: String?) {
         if (!modelDir.exists() || !modelDir.isDirectory) {
             throw IllegalArgumentException("Katalog modelu nie istnieje: ${modelDir.absolutePath}")
         }
@@ -46,14 +54,14 @@ class VoskEngineManager(val context: Context) {
         currentModel = model
         currentRecognizer = recognizer
         _isModelLoaded.value = true
-        _activeModelName.value = modelDir.name
+        _activeModelNameState.value = modelDir.name
     }
 
     fun loadModel(modelPath: String) {
         loadModel(File(modelPath))
     }
 
-    fun acceptWaveform(buffer: ShortArray, readSize: Int): String {
+    override fun acceptWaveform(buffer: ShortArray, readSize: Int): String {
         val recognizer = currentRecognizer ?: return ""
         val isFinal = recognizer.acceptWaveForm(buffer, readSize)
         return if (isFinal) {
@@ -63,7 +71,7 @@ class VoskEngineManager(val context: Context) {
         }
     }
 
-    fun getFinalResult(): String {
+    override fun getFinalResult(): String {
         val recognizer = currentRecognizer ?: return ""
         return parseTextFromJson(recognizer.finalResult)
     }
@@ -73,7 +81,7 @@ class VoskEngineManager(val context: Context) {
         return res.text
     }
 
-    fun transcribeWavFile(wavFile: File, sampleRate: Float = 16000f): RecognitionResult {
+    override fun transcribeWavFile(wavFile: File, sampleRate: Float): RecognitionResult {
         val model = currentModel ?: throw IllegalStateException("Model Vosk nie został załadowany")
         val recognizer = Recognizer(model, sampleRate)
 
@@ -100,14 +108,21 @@ class VoskEngineManager(val context: Context) {
         val text = parseTextFromJson(finalJson)
         recognizer.close()
 
+        val processingTimeMs = maxOf(1L, endTime - startTime)
+        val pcmBytes = maxOf(0L, wavFile.length() - 44)
+        val audioDurationMs = (pcmBytes * 1000) / (sampleRate.toLong() * 2)
+        val rtf = if (audioDurationMs > 0) processingTimeMs.toFloat() / audioDurationMs.toFloat() else 0f
+
         return RecognitionResult(
             text = text,
-            recognitionTimeMs = endTime - startTime,
+            recognitionTimeMs = processingTimeMs,
+            audioDurationMs = audioDurationMs,
+            rtf = rtf,
             rawJson = finalJson
         )
     }
 
-    fun close() {
+    override fun close() {
         try {
             currentRecognizer?.close()
         } catch (_: Exception) {}
@@ -118,7 +133,7 @@ class VoskEngineManager(val context: Context) {
         currentRecognizer = null
         currentModel = null
         _isModelLoaded.value = false
-        _activeModelName.value = "Brak"
+        _activeModelNameState.value = "Brak"
     }
 
     private fun parseTextFromJson(json: String): String {

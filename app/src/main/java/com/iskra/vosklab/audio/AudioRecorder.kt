@@ -16,7 +16,8 @@ data class AudioAnalysisResult(
     val avgRmsDb: Float,
     val estimatedNoiseFloorDb: Float,
     val snrDb: Float,
-    val droppedFirstWordsDetected: Boolean
+    val firstPcmMs: Long,
+    val speechOnsetMs: Long
 )
 
 class AudioRecorder {
@@ -28,17 +29,25 @@ class AudioRecorder {
     }
 
     interface AudioFrameListener {
-        fun onAudioFrame(buffer: ShortArray, readSize: Int, currentRmsDb: Float)
+        fun onAudioFrame(buffer: ShortArray, readSize: Int, currentRmsDb: Float, timestampMs: Long)
     }
 
     @Volatile
     private var isRecording = false
     private var recordingThread: Thread? = null
 
+    var micStartMs: Long = 0L
+        private set
+    var firstPcmMs: Long = 0L
+        private set
+    var speechOnsetMs: Long = 0L
+        private set
+    var stopMs: Long = 0L
+        private set
+
     @SuppressLint("MissingPermission")
     fun startRecording(
         outputFile: File,
-        vadSensitivityRatio: Float = 0.5f,
         listener: AudioFrameListener? = null
     ) {
         val minBufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
@@ -56,6 +65,11 @@ class AudioRecorder {
             throw IllegalStateException("Nie można zainicjalizować mikrofonu AudioRecord.")
         }
 
+        micStartMs = System.currentTimeMillis()
+        firstPcmMs = 0L
+        speechOnsetMs = 0L
+        stopMs = 0L
+
         isRecording = true
         audioRecord.startRecording()
 
@@ -67,22 +81,17 @@ class AudioRecorder {
             val byteBuffer = ByteArray(2048)
             var totalBytesWritten = 0
 
-            var peakAmp = 0
-            var sumRmsSq = 0.0
-            var totalFrames = 0
-
-            var initialFramesCount = 0
-
             while (isRecording) {
                 val readCount = audioRecord.read(buffer, 0, buffer.size)
+                val now = System.currentTimeMillis()
                 if (readCount > 0) {
+                    if (firstPcmMs == 0L) {
+                        firstPcmMs = now
+                    }
+
                     var frameSumSq = 0.0
                     for (i in 0 until readCount) {
                         val sample = buffer[i].toInt()
-                        val absSample = kotlin.math.abs(sample)
-                        if (absSample > peakAmp) {
-                            peakAmp = absSample
-                        }
                         frameSumSq += sample * sample
 
                         byteBuffer[i * 2] = (sample and 0xFF).toByte()
@@ -90,22 +99,20 @@ class AudioRecorder {
                     }
 
                     val frameRms = sqrt(frameSumSq / readCount)
-                    val frameRmsDb = if (frameRms > 0) 20 * log10(frameRms) else 0.0
+                    val frameRmsDb = if (frameRms > 0) (20 * log10(frameRms)).toFloat() else 0f
 
-                    sumRmsSq += frameSumSq
-                    totalFrames += readCount
-
-                    if (initialFramesCount < 10) {
-                        initialFramesCount++
+                    if (speechOnsetMs == 0L && frameRmsDb > 35f) {
+                        speechOnsetMs = now
                     }
 
                     fileOutputStream.write(byteBuffer, 0, readCount * 2)
                     totalBytesWritten += readCount * 2
 
-                    listener?.onAudioFrame(buffer, readCount, frameRmsDb.toFloat())
+                    listener?.onAudioFrame(buffer, readCount, frameRmsDb, now)
                 }
             }
 
+            stopMs = System.currentTimeMillis()
             audioRecord.stop()
             audioRecord.release()
             fileOutputStream.close()
@@ -124,7 +131,7 @@ class AudioRecorder {
 
     fun analyzeAudioFile(wavFile: File): AudioAnalysisResult {
         if (!wavFile.exists() || wavFile.length() <= 44) {
-            return AudioAnalysisResult(0L, 0, 0f, 0f, 0f, false)
+            return AudioAnalysisResult(0L, 0, 0f, 0f, 0f, firstPcmMs, speechOnsetMs)
         }
 
         val fileLength = wavFile.length() - 44
@@ -141,8 +148,6 @@ class AudioRecorder {
         var speechEnergy = 0.0
         var speechSamples = 0
 
-        var firstWindowSpeechClipped = false
-
         for (i in 44 until bytes.size - 1 step 2) {
             val sample = ((bytes[i + 1].toInt() shl 8) or (bytes[i].toInt() and 0xFF)).toShort().toInt()
             val absSample = kotlin.math.abs(sample)
@@ -157,11 +162,6 @@ class AudioRecorder {
             } else {
                 speechEnergy += sq
                 speechSamples++
-            }
-
-            val sampleIdx = (i - 44) / 2
-            if (sampleIdx < 4800 && absSample > 15000) {
-                firstWindowSpeechClipped = true
             }
         }
 
@@ -180,7 +180,8 @@ class AudioRecorder {
             avgRmsDb = avgRmsDb,
             estimatedNoiseFloorDb = noiseFloorDb,
             snrDb = snrDb,
-            droppedFirstWordsDetected = firstWindowSpeechClipped
+            firstPcmMs = firstPcmMs,
+            speechOnsetMs = speechOnsetMs
         )
     }
 

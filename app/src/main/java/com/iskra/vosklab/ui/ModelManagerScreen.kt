@@ -11,6 +11,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.iskra.vosklab.vosk.ModelManager
 import com.iskra.vosklab.vosk.VoskEngineManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
@@ -19,8 +22,13 @@ fun ModelManagerScreen(
     voskEngineManager: VoskEngineManager,
     onRequestZipImport: () -> Unit
 ) {
+    val coroutineScope = rememberCoroutineScope()
+
     var installedModels by remember { mutableStateOf(modelManager.listInstalledModels()) }
-    val activeModelName = voskEngineManager.activeModelName.collectAsState().value
+    var isLoadingModel by remember { mutableStateOf(false) }
+    var statusText by remember { mutableStateOf("") }
+
+    val activeModelName = voskEngineManager.activeModelNameState.collectAsState().value
 
     fun refresh() {
         installedModels = modelManager.listInstalledModels()
@@ -40,6 +48,7 @@ fun ModelManagerScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = onRequestZipImport,
+                    enabled = !isLoadingModel,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Wybierz plik ZIP z modelem")
@@ -48,6 +57,11 @@ fun ModelManagerScreen(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        if (statusText.isNotBlank()) {
+            Text(text = statusText, style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         Text(text = "Zainstalowane modele:", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
@@ -89,17 +103,31 @@ fun ModelManagerScreen(
                                 horizontalArrangement = Arrangement.End
                             ) {
                                 if (!isActive) {
-                                    Button(onClick = {
-                                        voskEngineManager.loadModel(File(model.path))
-                                        refresh()
-                                    }) {
+                                    Button(
+                                        enabled = !isLoadingModel,
+                                        onClick = {
+                                            isLoadingModel = true
+                                            statusText = "Ładowanie modelu ${model.name}..."
+                                            coroutineScope.launch {
+                                                withContext(Dispatchers.IO) {
+                                                    voskEngineManager.loadModel(File(model.path))
+                                                }
+                                                isLoadingModel = false
+                                                statusText = "Załadowano model ${model.name}"
+                                                refresh()
+                                            }
+                                        }
+                                    ) {
                                         Text("Załaduj")
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    OutlinedButton(onClick = {
-                                        modelManager.deleteModel(model)
-                                        refresh()
-                                    }) {
+                                    OutlinedButton(
+                                        enabled = !isLoadingModel,
+                                        onClick = {
+                                            modelManager.deleteModel(model)
+                                            refresh()
+                                        }
+                                    ) {
                                         Text("Usuń")
                                     }
                                 }

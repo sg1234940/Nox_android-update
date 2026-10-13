@@ -15,10 +15,18 @@ data class VoskModelInfo(
     val isDefault: Boolean = false
 )
 
-class ModelManager(private val context: Context) {
+class ModelManager(
+    private val context: Context? = null,
+    private val customModelsDir: File? = null
+) {
+
+    companion object {
+        const val MAX_ZIP_ENTRIES = 10_000
+        const val MAX_ZIP_TOTAL_SIZE = 1_073_741_824L // 1 GB
+    }
 
     private val modelsDir: File
-        get() = File(context.filesDir, "vosk_models").apply { if (!exists()) mkdirs() }
+        get() = customModelsDir ?: File(context!!.filesDir, "vosk_models").apply { if (!exists()) mkdirs() }
 
     fun listInstalledModels(): List<VoskModelInfo> = listAvailableModels()
 
@@ -45,7 +53,7 @@ class ModelManager(private val context: Context) {
 
     fun copyDefaultModelFromAssetsIfNeeded() {
         val defaultDir = File(modelsDir, "vosk-model-small-pl-0.22")
-        if (!defaultDir.exists()) {
+        if (!defaultDir.exists() && context != null) {
             try {
                 val assetManager = context.assets
                 val modelZipStream = assetManager.open("vosk-model-small-pl-0.22.zip")
@@ -56,6 +64,7 @@ class ModelManager(private val context: Context) {
     }
 
     fun importModelFromZip(uri: Uri): Boolean {
+        if (context == null) return false
         return try {
             val inputStream = context.contentResolver.openInputStream(uri) ?: return false
             val folderName = "model_${System.currentTimeMillis()}"
@@ -74,12 +83,28 @@ class ModelManager(private val context: Context) {
         }
         targetDir.mkdirs()
 
+        val destDirCanonical = targetDir.canonicalPath
         val zis = ZipInputStream(zipInputStream)
         var entry = zis.nextEntry
         val buffer = ByteArray(8192)
 
+        var totalEntries = 0
+        var totalBytesRead = 0L
+
         while (entry != null) {
+            totalEntries++
+            if (totalEntries > MAX_ZIP_ENTRIES) {
+                targetDir.deleteRecursively()
+                throw SecurityException("Za dużo wpisów w archiwum ZIP (przekroczono limit $MAX_ZIP_ENTRIES).")
+            }
+
             val file = File(targetDir, entry.name)
+            val fileCanonical = file.canonicalPath
+            if (!fileCanonical.startsWith(destDirCanonical + File.separator) && fileCanonical != destDirCanonical) {
+                targetDir.deleteRecursively()
+                throw SecurityException("Wykryto zagrożenie Zip Slip: ścieżka '${entry.name}' poza katalogiem docelowym.")
+            }
+
             if (entry.isDirectory) {
                 file.mkdirs()
             } else {
@@ -87,6 +112,12 @@ class ModelManager(private val context: Context) {
                 val fos = FileOutputStream(file)
                 var len = zis.read(buffer)
                 while (len > 0) {
+                    totalBytesRead += len
+                    if (totalBytesRead > MAX_ZIP_TOTAL_SIZE) {
+                        fos.close()
+                        targetDir.deleteRecursively()
+                        throw SecurityException("Przekroczono maksymalny rozmiar po rozpakowaniu ($MAX_ZIP_TOTAL_SIZE bajtów).")
+                    }
                     fos.write(buffer, 0, len)
                     len = zis.read(buffer)
                 }

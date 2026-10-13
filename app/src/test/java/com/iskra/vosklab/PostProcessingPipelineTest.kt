@@ -5,6 +5,7 @@ import com.iskra.vosklab.personalization.PersonalizationConfig
 import com.iskra.vosklab.personalization.PostProcessingPipeline
 import com.iskra.vosklab.personalization.ProperNounRule
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class PostProcessingPipelineTest {
@@ -16,21 +17,24 @@ class PostProcessingPipelineTest {
             customDictionary = listOf(DictionaryReplacement("wloncz", "włącz")),
             properNouns = listOf(ProperNounRule("iskra", "Iskra"))
         )
-        val pipeline = PostProcessingPipeline(config)
+        val pipeline = PostProcessingPipeline(config = config)
 
-        val raw = "wloncz iskra glosowa"
-        val processed = pipeline.applyPostProcessing(raw)
+        val rawTranscript = "wloncz iskra glosowa"
+        val processedText = pipeline.applyPostProcessing(rawTranscript)
 
-        assertEquals("włącz Iskra glosowa", processed)
+        // RAW transcript remains untouched, processed text receives post-corrections
+        assertEquals("wloncz iskra glosowa", rawTranscript)
+        assertEquals("włącz Iskra glosowa", processedText)
+        assertNotEquals(rawTranscript, processedText)
     }
 
     @Test
     fun testDisabledPipeline() {
         val config = PersonalizationConfig(enabled = false)
-        val pipeline = PostProcessingPipeline(config)
+        val pipeline = PostProcessingPipeline(config = config)
 
-        val raw = "wloncz iskra"
-        val processed = pipeline.applyPostProcessing(raw)
+        val rawTranscript = "wloncz iskra"
+        val processed = pipeline.applyPostProcessing(rawTranscript)
 
         assertEquals("wloncz iskra", processed)
     }

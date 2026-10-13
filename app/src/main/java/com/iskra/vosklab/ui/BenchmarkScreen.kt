@@ -7,11 +7,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.iskra.vosklab.data.RecordingItem
 import com.iskra.vosklab.data.RecordingRepository
 import com.iskra.vosklab.metrics.TextMetrics
 import com.iskra.vosklab.vosk.ModelManager
 import com.iskra.vosklab.vosk.VoskEngineManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 data class BenchmarkResult(
@@ -23,6 +25,7 @@ data class BenchmarkResult(
 data class ModelRunResult(
     val transcript: String,
     val recognitionTimeMs: Long,
+    val rtf: Float,
     val wer: Float,
     val cer: Float
 )
@@ -33,6 +36,8 @@ fun BenchmarkScreen(
     modelManager: ModelManager,
     voskEngineManager: VoskEngineManager
 ) {
+    val coroutineScope = rememberCoroutineScope()
+
     var availableModels by remember { mutableStateOf(modelManager.listInstalledModels()) }
     var selectedModels by remember { mutableStateOf(availableModels.map { it.name }.toSet()) }
 
@@ -80,47 +85,57 @@ fun BenchmarkScreen(
                     enabled = !isBenchmarking && selectedModels.isNotEmpty() && recordings.isNotEmpty(),
                     onClick = {
                         isBenchmarking = true
-                        val results = mutableListOf<BenchmarkResult>()
-                        val modelsToRun = availableModels.filter { selectedModels.contains(it.name) }
+                        coroutineScope.launch {
+                            withContext(Dispatchers.IO) {
+                                val results = mutableListOf<BenchmarkResult>()
+                                val modelsToRun = availableModels.filter { selectedModels.contains(it.name) }
 
-                        modelsToRun.forEach { modelInfo ->
-                            progressText = "Ładowanie modelu ${modelInfo.name}..."
-                            voskEngineManager.loadModel(File(modelInfo.path))
-
-                            recordings.forEach { item ->
-                                progressText = "Przetwarzanie ${item.id} przez ${modelInfo.name}..."
-                                val audioFile = File(item.audioPath)
-                                if (audioFile.exists()) {
-                                    val startTime = System.currentTimeMillis()
-                                    val transcript = voskEngineManager.recognizeAudioFile(audioFile)
-                                    val elapsed = System.currentTimeMillis() - startTime
-
-                                    val ref = item.correctedText.ifBlank { item.rawTranscript }
-                                    val wer = TextMetrics.calculateWordMetrics(ref, transcript).errorRate
-                                    val cer = TextMetrics.calculateCharacterMetrics(ref, transcript).errorRate
-
-                                    var existing = results.find { it.recordingId == item.id }
-                                    if (existing == null) {
-                                        existing = BenchmarkResult(
-                                            recordingId = item.id,
-                                            referenceText = ref,
-                                            modelResults = mutableMapOf()
-                                        )
-                                        results.add(existing)
+                                modelsToRun.forEach { modelInfo ->
+                                    withContext(Dispatchers.Main) {
+                                        progressText = "Ładowanie modelu ${modelInfo.name}..."
                                     }
-                                    (existing.modelResults as MutableMap<String, ModelRunResult>)[modelInfo.name] = ModelRunResult(
-                                        transcript = transcript,
-                                        recognitionTimeMs = elapsed,
-                                        wer = wer,
-                                        cer = cer
-                                    )
+                                    voskEngineManager.loadModel(File(modelInfo.path))
+
+                                    recordings.forEach { item ->
+                                        withContext(Dispatchers.Main) {
+                                            progressText = "Przetwarzanie ${item.id} przez ${modelInfo.name}..."
+                                        }
+                                        val audioFile = File(item.audioPath)
+                                        if (audioFile.exists()) {
+                                            val recRes = voskEngineManager.transcribeWavFile(audioFile)
+                                            val transcript = recRes.text
+
+                                            val ref = item.correctedText.ifBlank { item.rawTranscript }
+                                            val wer = TextMetrics.calculateWordMetrics(ref, transcript).errorRate
+                                            val cer = TextMetrics.calculateCharacterMetrics(ref, transcript).errorRate
+
+                                            var existing = results.find { it.recordingId == item.id }
+                                            if (existing == null) {
+                                                existing = BenchmarkResult(
+                                                    recordingId = item.id,
+                                                    referenceText = ref,
+                                                    modelResults = mutableMapOf()
+                                                )
+                                                results.add(existing)
+                                            }
+                                            (existing.modelResults as MutableMap<String, ModelRunResult>)[modelInfo.name] = ModelRunResult(
+                                                transcript = transcript,
+                                                recognitionTimeMs = recRes.recognitionTimeMs,
+                                                rtf = recRes.rtf,
+                                                wer = wer,
+                                                cer = cer
+                                            )
+                                        }
+                                    }
+                                }
+
+                                withContext(Dispatchers.Main) {
+                                    benchmarkResults = results
+                                    isBenchmarking = false
+                                    progressText = "Benchmark zakończony!"
                                 }
                             }
                         }
-
-                        benchmarkResults = results
-                        isBenchmarking = false
-                        progressText = "Benchmark zakończony!"
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -148,7 +163,7 @@ fun BenchmarkScreen(
                             val runRes = entry.value
                             Text(text = "Model: $modelName", style = MaterialTheme.typography.labelMedium)
                             Text(text = "Transkrypcja: ${runRes.transcript}")
-                            Text(text = "WER: ${(runRes.wer * 100).toInt()}% | CER: ${(runRes.cer * 100).toInt()}% | Czas: ${runRes.recognitionTimeMs} ms")
+                            Text(text = "WER: ${(runRes.wer * 100).toInt()}% | CER: ${(runRes.cer * 100).toInt()}% | Czas: ${runRes.recognitionTimeMs} ms | RTF: %.2f".format(runRes.rtf))
                             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         }
                     }

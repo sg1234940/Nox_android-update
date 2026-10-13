@@ -12,7 +12,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.IskraVoskLab">
         <activity
-            android:name=".ui.MainActivity"
+            android:name="com.iskra.vosklab.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.IskraVoskLab">
             <intent-filter>

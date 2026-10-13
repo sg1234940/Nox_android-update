@@ -1,6 +1,7 @@
 package com.iskra.vosklab.data
 
 import android.content.Context
+import com.iskra.vosklab.metrics.DiagnosticTimestamps
 import com.iskra.vosklab.metrics.RecognitionMetrics
 import com.iskra.vosklab.metrics.TextMetrics
 import org.json.JSONArray
@@ -32,6 +33,20 @@ class RecordingRepository(private val context: Context) {
                 val obj = jsonArray.getJSONObject(i)
                 val raw = obj.optString("rawTranscript", "")
                 val corr = obj.optString("correctedText", raw)
+
+                val tsObj = obj.optJSONObject("timestamps")
+                val timestamps = if (tsObj != null) {
+                    DiagnosticTimestamps(
+                        micStartMs = tsObj.optLong("micStartMs", 0L),
+                        firstPcmMs = tsObj.optLong("firstPcmMs", 0L),
+                        speechOnsetMs = tsObj.optLong("speechOnsetMs", 0L),
+                        firstPartialMs = tsObj.optLong("firstPartialMs", 0L),
+                        firstWordMs = tsObj.optLong("firstWordMs", 0L),
+                        finalMs = tsObj.optLong("finalMs", 0L),
+                        stopMs = tsObj.optLong("stopMs", 0L)
+                    )
+                } else DiagnosticTimestamps()
+
                 list.add(
                     RecordingItem(
                         id = obj.getString("id"),
@@ -40,11 +55,15 @@ class RecordingRepository(private val context: Context) {
                         rawTranscript = raw,
                         correctedText = corr,
                         metrics = RecognitionMetrics(
+                            timestamps = timestamps,
+                            micStartupMs = obj.optLong("micStartupMs", 0L),
+                            speechOnsetDelayMs = obj.optLong("speechOnsetDelayMs", 0L),
+                            firstPartialLatencyMs = obj.optLong("firstPartialLatencyMs", 0L),
                             firstWordLatencyMs = obj.optLong("firstWordLatencyMs", 0L),
                             totalRecognitionTimeMs = obj.optLong("totalRecognitionTimeMs", 0L),
                             audioDurationMs = obj.optLong("audioDurationMs", 0L),
+                            rtf = obj.optDouble("rtf", 0.0).toFloat(),
                             snrDb = obj.optDouble("snrDb", 0.0).toFloat(),
-                            droppedInitialWords = obj.optBoolean("droppedInitialWords", false),
                             wer = obj.optDouble("wer", 0.0).toFloat(),
                             cer = obj.optDouble("cer", 0.0).toFloat()
                         ),
@@ -62,30 +81,7 @@ class RecordingRepository(private val context: Context) {
         val current = getAllRecordings().toMutableList()
         current.removeAll { it.id == item.id }
         current.add(0, item)
-
-        val jsonArray = JSONArray()
-        current.forEach { rec ->
-            val obj = JSONObject().apply {
-                put("id", rec.id)
-                put("timestamp", rec.timestamp)
-                put("audioPath", rec.audioPath)
-                put("rawTranscript", rec.rawTranscript)
-                put("correctedText", rec.correctedText)
-                put("firstWordLatencyMs", rec.metrics.firstWordLatencyMs)
-                put("totalRecognitionTimeMs", rec.metrics.totalRecognitionTimeMs)
-                put("audioDurationMs", rec.metrics.audioDurationMs)
-                put("snrDb", rec.metrics.snrDb)
-                put("droppedInitialWords", rec.metrics.droppedInitialWords)
-                put("wer", rec.metrics.wer)
-                put("cer", rec.metrics.cer)
-                put("modelName", rec.modelName)
-            }
-            jsonArray.put(obj)
-        }
-
-        FileWriter(metadataFile).use { writer ->
-            writer.write(jsonArray.toString(2))
-        }
+        saveList(current)
     }
 
     fun updateCorrection(id: String, newCorrectedText: String) {
@@ -104,30 +100,7 @@ class RecordingRepository(private val context: Context) {
                 metrics = updatedMetrics
             )
             current[index] = updatedItem
-
-            val jsonArray = JSONArray()
-            current.forEach { rec ->
-                val obj = JSONObject().apply {
-                    put("id", rec.id)
-                    put("timestamp", rec.timestamp)
-                    put("audioPath", rec.audioPath)
-                    put("rawTranscript", rec.rawTranscript)
-                    put("correctedText", rec.correctedText)
-                    put("firstWordLatencyMs", rec.metrics.firstWordLatencyMs)
-                    put("totalRecognitionTimeMs", rec.metrics.totalRecognitionTimeMs)
-                    put("audioDurationMs", rec.metrics.audioDurationMs)
-                    put("snrDb", rec.metrics.snrDb)
-                    put("droppedInitialWords", rec.metrics.droppedInitialWords)
-                    put("wer", rec.metrics.wer)
-                    put("cer", rec.metrics.cer)
-                    put("modelName", rec.modelName)
-                }
-                jsonArray.put(obj)
-            }
-
-            FileWriter(metadataFile).use { writer ->
-                writer.write(jsonArray.toString(2))
-            }
+            saveList(current)
         }
     }
 
@@ -137,30 +110,49 @@ class RecordingRepository(private val context: Context) {
         if (item != null) {
             File(item.audioPath).delete()
             current.remove(item)
+            saveList(current)
+        }
+    }
 
-            val jsonArray = JSONArray()
-            current.forEach { rec ->
-                val obj = JSONObject().apply {
-                    put("id", rec.id)
-                    put("timestamp", rec.timestamp)
-                    put("audioPath", rec.audioPath)
-                    put("rawTranscript", rec.rawTranscript)
-                    put("correctedText", rec.correctedText)
-                    put("firstWordLatencyMs", rec.metrics.firstWordLatencyMs)
-                    put("totalRecognitionTimeMs", rec.metrics.totalRecognitionTimeMs)
-                    put("audioDurationMs", rec.metrics.audioDurationMs)
-                    put("snrDb", rec.metrics.snrDb)
-                    put("droppedInitialWords", rec.metrics.droppedInitialWords)
-                    put("wer", rec.metrics.wer)
-                    put("cer", rec.metrics.cer)
-                    put("modelName", rec.modelName)
+    private fun saveList(list: List<RecordingItem>) {
+        val jsonArray = JSONArray()
+        list.forEach { rec ->
+            val obj = JSONObject().apply {
+                put("id", rec.id)
+                put("timestamp", rec.timestamp)
+                put("audioPath", rec.audioPath)
+                put("rawTranscript", rec.rawTranscript)
+                put("correctedText", rec.correctedText)
+
+                val ts = rec.metrics.timestamps
+                val tsObj = JSONObject().apply {
+                    put("micStartMs", ts.micStartMs)
+                    put("firstPcmMs", ts.firstPcmMs)
+                    put("speechOnsetMs", ts.speechOnsetMs)
+                    put("firstPartialMs", ts.firstPartialMs)
+                    put("firstWordMs", ts.firstWordMs)
+                    put("finalMs", ts.finalMs)
+                    put("stopMs", ts.stopMs)
                 }
-                jsonArray.put(obj)
-            }
+                put("timestamps", tsObj)
 
-            FileWriter(metadataFile).use { writer ->
-                writer.write(jsonArray.toString(2))
+                put("micStartupMs", rec.metrics.micStartupMs)
+                put("speechOnsetDelayMs", rec.metrics.speechOnsetDelayMs)
+                put("firstPartialLatencyMs", rec.metrics.firstPartialLatencyMs)
+                put("firstWordLatencyMs", rec.metrics.firstWordLatencyMs)
+                put("totalRecognitionTimeMs", rec.metrics.totalRecognitionTimeMs)
+                put("audioDurationMs", rec.metrics.audioDurationMs)
+                put("rtf", rec.metrics.rtf)
+                put("snrDb", rec.metrics.snrDb)
+                put("wer", rec.metrics.wer)
+                put("cer", rec.metrics.cer)
+                put("modelName", rec.modelName)
             }
+            jsonArray.put(obj)
+        }
+
+        FileWriter(metadataFile).use { writer ->
+            writer.write(jsonArray.toString(2))
         }
     }
 

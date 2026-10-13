@@ -1,6 +1,7 @@
 package com.iskra.vosklab
 
 import com.iskra.vosklab.data.RecordingItem
+import com.iskra.vosklab.metrics.DiagnosticTimestamps
 import com.iskra.vosklab.metrics.RecognitionMetrics
 import com.iskra.vosklab.personalization.DatasetExporter
 import org.junit.Assert.assertTrue
@@ -19,18 +20,20 @@ class DatasetExporterTest {
         val dummyAudioFile = tempFolder.newFile("test_sample.wav")
         dummyAudioFile.writeBytes(ByteArray(100))
 
+        val now = System.currentTimeMillis()
         val recording = RecordingItem(
             id = "1001",
-            timestamp = System.currentTimeMillis(),
+            timestamp = now,
             audioPath = dummyAudioFile.absolutePath,
             rawTranscript = "testowe nagranie",
             correctedText = "Testowe nagranie.",
             metrics = RecognitionMetrics(
+                timestamps = DiagnosticTimestamps(micStartMs = now, finalMs = now + 450),
                 firstWordLatencyMs = 120,
                 totalRecognitionTimeMs = 450,
                 audioDurationMs = 2000,
+                rtf = 0.225f,
                 snrDb = 18.5f,
-                droppedInitialWords = false,
                 wer = 0.0f,
                 cer = 0.0f
             ),
