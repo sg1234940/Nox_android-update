@@ -82,6 +82,64 @@ class ZipSecurityTest {
     }
 
     @Test
+    fun testRejectOnlyConfDirectory() {
+        val dir = tempFolder.newFolder("only_conf")
+        File(dir, "conf").mkdirs()
+        File(dir, "conf/model.conf").writeText("some config")
+
+        val manager = ModelManager(customModelsDir = tempFolder.root)
+        assertFalse("Directory with only conf/ must be rejected", manager.isValidVoskModelDirectory(dir))
+    }
+
+    @Test
+    fun testRejectOnlyEmptyAmDirectory() {
+        val dir = tempFolder.newFolder("empty_am")
+        File(dir, "am").mkdirs()
+        File(dir, "conf").mkdirs()
+        File(dir, "conf/model.conf").writeText("some config")
+
+        val manager = ModelManager(customModelsDir = tempFolder.root)
+        assertFalse("Directory with empty am/ must be rejected", manager.isValidVoskModelDirectory(dir))
+    }
+
+    @Test
+    fun testRejectArbitraryFileInAmEvenWithConfig() {
+        val dir = tempFolder.newFolder("fake_am_contents")
+        File(dir, "am").mkdirs()
+        File(dir, "am/not_a_model.txt").writeText("not an acoustic model")
+        File(dir, "conf").mkdirs()
+        File(dir, "conf/model.conf").writeText("some config")
+
+        val manager = ModelManager(customModelsDir = tempFolder.root)
+        assertFalse(
+            "am/ with an arbitrary file must not be accepted as a Vosk acoustic model",
+            manager.isValidVoskModelDirectory(dir)
+        )
+    }
+
+    @Test
+    fun testRejectRandomFinalMdlInWrongPlace() {
+        val dir = tempFolder.newFolder("wrong_place")
+        File(dir, "some_folder").mkdirs()
+        File(dir, "some_folder/final.mdl").writeText("fake mdl")
+
+        val manager = ModelManager(customModelsDir = tempFolder.root)
+        assertFalse("Mislocated final.mdl must be rejected", manager.isValidVoskModelDirectory(dir))
+    }
+
+    @Test
+    fun testAcceptMinimalValidVoskModelStructure() {
+        val dir = tempFolder.newFolder("valid_structure")
+        File(dir, "am").mkdirs()
+        File(dir, "am/final.mdl").writeText("acoustic model binary")
+        File(dir, "conf").mkdirs()
+        File(dir, "conf/model.conf").writeText("model config")
+
+        val manager = ModelManager(customModelsDir = tempFolder.root)
+        assertTrue("Minimal valid structure must be accepted", manager.isValidVoskModelDirectory(dir))
+    }
+
+    @Test
     fun testValidVoskModelZipExtraction() {
         val zipBytesStream = ByteArrayOutputStream()
         ZipOutputStream(zipBytesStream).use { zos ->
