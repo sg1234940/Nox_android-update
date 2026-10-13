@@ -30,18 +30,19 @@ class DatasetExporter(private val exportDir: File) {
 
             manifestWriter.write("[\n")
 
-            recordings.forEachIndexed { index, item ->
+            val exportableRecordings = recordings.filter { File(it.audioPath).exists() }
+
+            exportableRecordings.forEachIndexed { index, item ->
                 val sourceFile = File(item.audioPath)
-                if (sourceFile.exists()) {
-                    val destWavName = "sample_${item.id}.wav"
-                    val destFile = File(wavsDir, destWavName)
-                    sourceFile.copyTo(destFile, overwrite = true)
+                val destWavName = "sample_${item.id}.wav"
+                val destFile = File(wavsDir, destWavName)
+                sourceFile.copyTo(destFile, overwrite = true)
 
-                    val targetText = item.correctedText.ifBlank { item.rawTranscript }
-                    val ts = item.metrics.timestamps
+                val targetText = item.correctedText.ifBlank { item.rawTranscript }
+                val ts = item.metrics.timestamps
 
-                    manifestWriter.write(
-                        """  {
+                manifestWriter.write(
+                    """  {
     "id": "${item.id}",
     "audio_file": "wavs/$destWavName",
     "raw_transcript": "${escapeJson(item.rawTranscript)}",
@@ -60,16 +61,15 @@ class DatasetExporter(private val exportDir: File) {
     "wer": ${item.metrics.wer},
     "cer": ${item.metrics.cer},
     "estimated_snr_db": ${item.metrics.snrDb}
-  }${if (index < recordings.size - 1) "," else ""}
+  }${if (index < exportableRecordings.size - 1) "," else ""}
 """
-                    )
+                )
 
-                    if (exportKaldiFormat) {
-                        val uttId = "iskra_${item.id}"
-                        kaldiTextWriter?.write("$uttId $targetText\n")
-                        kaldiWavWriter?.write("$uttId wavs/$destWavName\n")
-                        kaldiUttWriter?.write("$uttId speaker_default\n")
-                    }
+                if (exportKaldiFormat) {
+                    val uttId = "iskra_${item.id}"
+                    kaldiTextWriter?.write("$uttId $targetText\n")
+                    kaldiWavWriter?.write("$uttId wavs/$destWavName\n")
+                    kaldiUttWriter?.write("$uttId speaker_default\n")
                 }
             }
 
