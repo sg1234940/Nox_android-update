@@ -107,7 +107,7 @@ fun RecordingHistoryCard(
             ) {
                 Text(text = "WER: ${(wordMetrics.errorRate * 100).toInt()}%")
                 Text(text = "CER: ${(charMetrics.errorRate * 100).toInt()}%")
-                Text(text = "SNR: ${item.metrics.snrDb} dB")
+                Text(text = "Estymowany SNR: %.1f dB".format(item.metrics.snrDb))
             }
 
             Spacer(modifier = Modifier.height(8.dp))

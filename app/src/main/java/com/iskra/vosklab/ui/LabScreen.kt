@@ -42,6 +42,7 @@ fun LabScreen(
     var currentAudioFile by remember { mutableStateOf<File?>(null) }
 
     var currentRmsDb by remember { mutableFloatStateOf(0f) }
+    var estimatedSnrDb by remember { mutableFloatStateOf(0f) }
     var audioDurationMs by remember { mutableLongStateOf(0L) }
 
     var micStartMs by remember { mutableLongStateOf(0L) }
@@ -150,23 +151,19 @@ fun LabScreen(
                                 coroutineScope.launch {
                                     withContext(Dispatchers.IO) {
                                         currentAudioFile?.let { wavFile ->
-                                            val startFinalTime = System.currentTimeMillis()
                                             val finalResult = voskEngineManager.getFinalResult()
                                             val endFinalTime = System.currentTimeMillis()
 
                                             val analysis = audioRecorder.analyzeAudioFile(wavFile)
                                             val audioDur = analysis.durationMs
-
                                             val processedText = postProcessingPipeline.applyPostProcessing(finalResult)
 
-                                            val firstPartial = if (firstPartialMs > 0) firstPartialMs else startFinalTime
-                                            val firstWord = if (firstWordMs > 0) firstWordMs else startFinalTime
                                             val finalTime = endFinalTime
 
                                             val micStartup = if (firstPcmMs > 0 && micStartMs > 0) maxOf(0L, firstPcmMs - micStartMs) else 0L
                                             val speechDelay = if (speechOnsetMs > 0 && micStartMs > 0) maxOf(0L, speechOnsetMs - micStartMs) else 0L
-                                            val partialLat = if (firstPartial > 0 && micStartMs > 0) maxOf(0L, firstPartial - micStartMs) else 0L
-                                            val wordLat = if (firstWord > 0 && micStartMs > 0) maxOf(0L, firstWord - micStartMs) else 0L
+                                            val partialLat = if (firstPartialMs > 0 && micStartMs > 0) maxOf(0L, firstPartialMs - micStartMs) else 0L
+                                            val wordLat = if (firstWordMs > 0 && micStartMs > 0) maxOf(0L, firstWordMs - micStartMs) else 0L
                                             val totalRecMs = if (finalTime > 0 && micStartMs > 0) maxOf(0L, finalTime - micStartMs) else 0L
                                             val rtfVal = if (audioDur > 0) totalRecMs.toFloat() / audioDur.toFloat() else 0f
 
@@ -174,8 +171,8 @@ fun LabScreen(
                                                 micStartMs = micStartMs,
                                                 firstPcmMs = firstPcmMs,
                                                 speechOnsetMs = speechOnsetMs,
-                                                firstPartialMs = firstPartial,
-                                                firstWordMs = firstWord,
+                                                firstPartialMs = firstPartialMs,
+                                                firstWordMs = firstWordMs,
                                                 finalMs = finalTime,
                                                 stopMs = stopMs
                                             )
@@ -209,6 +206,7 @@ fun LabScreen(
                                                 currentRawTranscript = finalResult
                                                 currentProcessedTranscript = processedText
                                                 audioDurationMs = audioDur
+                                                estimatedSnrDb = analysis.snrDb
                                                 heapUsageMb = PerformanceProfiler.getMemoryStats().usedMemoryMb
                                                 isProcessing = false
                                             }
@@ -270,18 +268,20 @@ fun LabScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val micStartup = if (firstPcmMs > 0 && micStartMs > 0) maxOf(0L, firstPcmMs - micStartMs) else 0L
-                val speechDelay = if (speechOnsetMs > 0 && micStartMs > 0) maxOf(0L, speechOnsetMs - micStartMs) else 0L
-                val partialLat = if (firstPartialMs > 0 && micStartMs > 0) maxOf(0L, firstPartialMs - micStartMs) else 0L
-                val wordLat = if (firstWordMs > 0 && micStartMs > 0) maxOf(0L, firstWordMs - micStartMs) else 0L
-                val totalMs = if (finalMs > 0 && micStartMs > 0) maxOf(0L, finalMs - micStartMs) else 0L
+                val micStartup = if (firstPcmMs > 0 && micStartMs > 0) "${firstPcmMs - micStartMs} ms" else "UNKNOWN"
+                val speechDelay = if (speechOnsetMs > 0 && micStartMs > 0) "${speechOnsetMs - micStartMs} ms" else "UNKNOWN"
+                val partialLat = if (firstPartialMs > 0 && micStartMs > 0) "${firstPartialMs - micStartMs} ms" else "UNKNOWN"
+                val wordLat = if (firstWordMs > 0 && micStartMs > 0) "${firstWordMs - micStartMs} ms" else "UNKNOWN"
+                val totalMs = if (finalMs > 0 && micStartMs > 0) "${finalMs - micStartMs} ms" else "UNKNOWN"
 
-                Text(text = "Start mikrofonu (MIC_START -> FIRST_PCM): ${micStartup} ms")
-                Text(text = "Początek mowy (SPEECH_ONSET): ${speechDelay} ms od MIC_START")
-                Text(text = "Pierwszy partial Vosk: ${partialLat} ms")
-                Text(text = "Pierwsze pełne słowo: ${wordLat} ms")
-                Text(text = "Całkowity czas transkrypcji: ${totalMs} ms")
+                Text(text = "Start mikrofonu (MIC_START -> FIRST_PCM): $micStartup")
+                Text(text = "Początek mowy (SPEECH_ONSET): $speechDelay")
+                Text(text = "Pierwszy partial Vosk: $partialLat")
+                Text(text = "Pierwsze pełne słowo: $wordLat")
+                Text(text = "Całkowity czas transkrypcji: $totalMs")
                 Text(text = "Długość nagrania: ${audioDurationMs} ms")
+                Text(text = "Estymowany SNR (heurystyka): %.1f dB".format(estimatedSnrDb))
+
                 currentAudioFile?.let { file ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(onClick = { audioPlayer.playFile(file) }) {

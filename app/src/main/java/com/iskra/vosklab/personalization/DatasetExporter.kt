@@ -38,6 +38,7 @@ class DatasetExporter(private val exportDir: File) {
                     sourceFile.copyTo(destFile, overwrite = true)
 
                     val targetText = item.correctedText.ifBlank { item.rawTranscript }
+                    val ts = item.metrics.timestamps
 
                     manifestWriter.write(
                         """  {
@@ -45,11 +46,20 @@ class DatasetExporter(private val exportDir: File) {
     "audio_file": "wavs/$destWavName",
     "raw_transcript": "${escapeJson(item.rawTranscript)}",
     "corrected_text": "${escapeJson(targetText)}",
-    "duration_ms": ${item.metrics.audioDurationMs},
-    "latency_ms": ${item.metrics.firstWordLatencyMs},
-    "snr_db": ${item.metrics.snrDb},
+    "model_name": "${escapeJson(item.modelName)}",
+    "timestamp": ${item.timestamp},
+    "micStartMs": ${ts.micStartMs},
+    "firstPcmMs": ${ts.firstPcmMs},
+    "speechOnsetMs": ${ts.speechOnsetMs},
+    "firstPartialMs": ${ts.firstPartialMs},
+    "firstWordMs": ${ts.firstWordMs},
+    "stopMs": ${ts.stopMs},
+    "finalMs": ${ts.finalMs},
+    "audio_duration_ms": ${item.metrics.audioDurationMs},
+    "rtf": ${item.metrics.rtf},
     "wer": ${item.metrics.wer},
-    "cer": ${item.metrics.cer}
+    "cer": ${item.metrics.cer},
+    "estimated_snr_db": ${item.metrics.snrDb}
   }${if (index < recordings.size - 1) "," else ""}
 """
                     )

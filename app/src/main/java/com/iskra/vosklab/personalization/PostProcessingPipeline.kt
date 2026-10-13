@@ -1,9 +1,9 @@
 package com.iskra.vosklab.personalization
 
 import android.content.Context
+import com.google.gson.Gson
 import com.iskra.vosklab.metrics.TextMetrics
-import org.json.JSONArray
-import org.json.JSONObject
+import java.io.File
 
 data class DictionaryReplacement(
     val trigger: String,
@@ -37,75 +37,56 @@ data class PersonalizationConfig(
 
 class PostProcessingPipeline(
     private val context: Context? = null,
+    private val storageDir: File? = null,
     var config: PersonalizationConfig = PersonalizationConfig()
 ) {
 
+    private val gson = Gson()
+
     init {
-        context?.let { loadFromStorage(it) }
+        loadFromStorage()
     }
 
-    fun saveToStorage(context: Context) {
-        val prefs = context.getSharedPreferences("iskra_postprocessing_prefs", Context.MODE_PRIVATE)
-        val editor = prefs.edit()
-
-        editor.putBoolean("enabled", config.enabled)
-
-        val dictArray = JSONArray()
-        config.customDictionary.forEach { rule ->
-            dictArray.put(JSONObject().apply {
-                put("trigger", rule.trigger)
-                put("replacement", rule.replacement)
-            })
+    fun saveToStorage() {
+        if (storageDir != null) {
+            val file = File(storageDir, "post_processing_config.json")
+            val jsonStr = gson.toJson(config)
+            file.writeText(jsonStr)
+        } else if (context != null) {
+            val prefs = context.getSharedPreferences("iskra_postprocessing_prefs", Context.MODE_PRIVATE)
+            val jsonStr = gson.toJson(config)
+            prefs.edit().putString("config_json", jsonStr).apply()
         }
-        editor.putString("customDictionary", dictArray.toString())
-
-        val nounArray = JSONArray()
-        config.properNouns.forEach { noun ->
-            nounArray.put(JSONObject().apply {
-                put("word", noun.word)
-                put("capitalizedWord", noun.capitalizedWord)
-            })
-        }
-        editor.putString("properNouns", nounArray.toString())
-
-        editor.apply()
     }
 
-    fun loadFromStorage(context: Context) {
-        val prefs = context.getSharedPreferences("iskra_postprocessing_prefs", Context.MODE_PRIVATE)
-        if (!prefs.contains("enabled")) return
-
-        val enabled = prefs.getBoolean("enabled", true)
-
-        val dictList = mutableListOf<DictionaryReplacement>()
-        val dictJsonStr = prefs.getString("customDictionary", null)
-        if (!dictJsonStr.isNullOrBlank()) {
-            val dictArray = JSONArray(dictJsonStr)
-            for (i in 0 until dictArray.length()) {
-                val obj = dictArray.getJSONObject(i)
-                dictList.add(DictionaryReplacement(obj.getString("trigger"), obj.getString("replacement")))
+    fun loadFromStorage() {
+        if (storageDir != null) {
+            val file = File(storageDir, "post_processing_config.json")
+            if (file.exists()) {
+                try {
+                    val jsonStr = file.readText()
+                    val loaded = gson.fromJson(jsonStr, PersonalizationConfig::class.java)
+                    if (loaded != null) {
+                        config = loaded
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
-        } else {
-            dictList.addAll(config.customDictionary)
-        }
-
-        val nounList = mutableListOf<ProperNounRule>()
-        val nounJsonStr = prefs.getString("properNouns", null)
-        if (!nounJsonStr.isNullOrBlank()) {
-            val nounArray = JSONArray(nounJsonStr)
-            for (i in 0 until nounArray.length()) {
-                val obj = nounArray.getJSONObject(i)
-                nounList.add(ProperNounRule(obj.getString("word"), obj.getString("capitalizedWord")))
+        } else if (context != null) {
+            val prefs = context.getSharedPreferences("iskra_postprocessing_prefs", Context.MODE_PRIVATE)
+            val jsonStr = prefs.getString("config_json", null)
+            if (!jsonStr.isNullOrBlank()) {
+                try {
+                    val loaded = gson.fromJson(jsonStr, PersonalizationConfig::class.java)
+                    if (loaded != null) {
+                        config = loaded
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
-        } else {
-            nounList.addAll(config.properNouns)
         }
-
-        config = config.copy(
-            enabled = enabled,
-            customDictionary = dictList,
-            properNouns = nounList
-        )
     }
 
     fun applyPostProcessing(rawTranscript: String): String {

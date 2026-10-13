@@ -20,7 +20,6 @@ class ZipSecurityTest {
     fun testZipSlipVulnerabilityPrevention() {
         val zipBytesStream = ByteArrayOutputStream()
         ZipOutputStream(zipBytesStream).use { zos ->
-            // Attempt malicious Zip Slip path traversal entry
             val entry = ZipEntry("../../../evil_script.sh")
             zos.putNextEntry(entry)
             zos.write("echo malicious".toByteArray())
@@ -51,30 +50,61 @@ class ZipSecurityTest {
                 ByteArrayInputStream(corruptedBytes),
                 "corrupted_model"
             )
+            fail("Expected Exception for corrupted zip")
         } catch (e: Exception) {
             assertNotNull(e)
         }
     }
 
     @Test
-    fun testValidZipExtraction() {
+    fun testNonModelZipRejectionAndCleanup() {
         val zipBytesStream = ByteArrayOutputStream()
         ZipOutputStream(zipBytesStream).use { zos ->
-            val entry = ZipEntry("model_file.txt")
+            val entry = ZipEntry("random_image.jpg")
             zos.putNextEntry(entry)
-            zos.write("vosk model data".toByteArray())
+            zos.write("not a vosk model".toByteArray())
+            zos.closeEntry()
+        }
+
+        val manager = ModelManager(customModelsDir = tempFolder.root)
+        try {
+            manager.importModelFromZipStream(
+                ByteArrayInputStream(zipBytesStream.toByteArray()),
+                "random_zip"
+            )
+            fail("Expected IllegalArgumentException for ZIP lacking Vosk model structure!")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message?.contains("Brak wymaganej struktury modelu Vosk") == true)
+        }
+
+        val rejectedDir = File(tempFolder.root, "random_zip")
+        assertFalse("Partially unzipped directory must be cleaned up on failure", rejectedDir.exists())
+    }
+
+    @Test
+    fun testValidVoskModelZipExtraction() {
+        val zipBytesStream = ByteArrayOutputStream()
+        ZipOutputStream(zipBytesStream).use { zos ->
+            val entry1 = ZipEntry("am/final.mdl")
+            zos.putNextEntry(entry1)
+            zos.write("vosk acoustic model data".toByteArray())
+            zos.closeEntry()
+
+            val entry2 = ZipEntry("conf/model.conf")
+            zos.putNextEntry(entry2)
+            zos.write("vosk model config".toByteArray())
             zos.closeEntry()
         }
 
         val manager = ModelManager(customModelsDir = tempFolder.root)
         val resultDir = manager.importModelFromZipStream(
             ByteArrayInputStream(zipBytesStream.toByteArray()),
-            "valid_model"
+            "valid_vosk_model"
         )
 
         assertTrue(resultDir.exists())
-        val extractedFile = File(resultDir, "model_file.txt")
+        val extractedFile = File(resultDir, "conf/model.conf")
         assertTrue(extractedFile.exists())
-        assertEquals("vosk model data", extractedFile.readText())
+        assertEquals("vosk model config", extractedFile.readText())
     }
 }

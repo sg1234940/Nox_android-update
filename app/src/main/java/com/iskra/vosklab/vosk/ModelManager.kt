@@ -34,7 +34,7 @@ class ModelManager(
         val dir = modelsDir
         val files = dir.listFiles() ?: return emptyList()
 
-        return files.filter { it.isDirectory }.map { folder ->
+        return files.filter { it.isDirectory && isValidVoskModelDirectory(it) }.map { folder ->
             val size = getFolderSize(folder)
             VoskModelInfo(
                 name = folder.name,
@@ -48,7 +48,19 @@ class ModelManager(
 
     fun getModelDirectory(name: String): File? {
         val file = File(modelsDir, name)
-        return if (file.exists() && file.isDirectory) file else null
+        return if (file.exists() && file.isDirectory && isValidVoskModelDirectory(file)) file else null
+    }
+
+    fun isValidVoskModelDirectory(modelDir: File): Boolean {
+        if (!modelDir.exists() || !modelDir.isDirectory) return false
+        val names = modelDir.walkTopDown().maxDepth(3).map { it.name.lowercase() }.toSet()
+        return names.contains("am") ||
+                names.contains("graph") ||
+                names.contains("conf") ||
+                names.contains("model.conf") ||
+                names.contains("mfcc.conf") ||
+                names.contains("final.mdl") ||
+                names.contains("ivector")
     }
 
     fun copyDefaultModelFromAssetsIfNeeded() {
@@ -135,6 +147,11 @@ class ModelManager(
             innerFolder.renameTo(tempDir)
             targetDir.deleteRecursively()
             tempDir.renameTo(targetDir)
+        }
+
+        if (!isValidVoskModelDirectory(targetDir)) {
+            targetDir.deleteRecursively()
+            throw IllegalArgumentException("Brak wymaganej struktury modelu Vosk (am, graph, conf, model.conf).")
         }
 
         return targetDir

@@ -6,7 +6,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.iskra.vosklab.personalization.DictionaryReplacement
 import com.iskra.vosklab.personalization.PostProcessingPipeline
@@ -16,7 +15,6 @@ import com.iskra.vosklab.personalization.ProperNounRule
 fun PersonalizationScreen(
     postProcessingPipeline: PostProcessingPipeline
 ) {
-    val context = LocalContext.current
     var config by remember { mutableStateOf(postProcessingPipeline.config) }
 
     var newTrigger by remember { mutableStateOf("") }
@@ -30,7 +28,7 @@ fun PersonalizationScreen(
     fun updateConfigAndSave(newConfig: com.iskra.vosklab.personalization.PersonalizationConfig) {
         config = newConfig
         postProcessingPipeline.config = newConfig
-        postProcessingPipeline.saveToStorage(context)
+        postProcessingPipeline.saveToStorage()
     }
 
     Column(

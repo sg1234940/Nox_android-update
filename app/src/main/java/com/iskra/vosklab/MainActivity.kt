@@ -16,18 +16,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.iskra.vosklab.data.RecordingRepository
 import com.iskra.vosklab.personalization.PostProcessingPipeline
 import com.iskra.vosklab.ui.*
 import com.iskra.vosklab.vosk.ModelManager
 import com.iskra.vosklab.vosk.VoskEngineManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var repository: RecordingRepository
     private lateinit var modelManager: ModelManager
     private lateinit var voskEngineManager: VoskEngineManager
-    private val postProcessingPipeline = PostProcessingPipeline()
+    private lateinit var postProcessingPipeline: PostProcessingPipeline
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -47,11 +51,15 @@ class MainActivity : ComponentActivity() {
 
     private fun handleZipUriResult(uri: Uri?) {
         uri?.let {
-            val success = modelManager.importModelFromZip(it)
-            if (success) {
-                Toast.makeText(this, "Zaimportowano nowy model Vosk", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "Błąd importu modelu Vosk", Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch(Dispatchers.IO) {
+                val success = modelManager.importModelFromZip(it)
+                withContext(Dispatchers.Main) {
+                    if (success) {
+                        Toast.makeText(this@MainActivity, "Zaimportowano nowy model Vosk", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "Błąd lub nieprawidłowa struktura modelu Vosk w ZIP", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     }
@@ -62,13 +70,16 @@ class MainActivity : ComponentActivity() {
         repository = RecordingRepository(applicationContext)
         modelManager = ModelManager(applicationContext)
         voskEngineManager = VoskEngineManager(applicationContext)
+        postProcessingPipeline = PostProcessingPipeline(applicationContext)
 
         checkPermissions()
-        modelManager.copyDefaultModelFromAssetsIfNeeded()
 
-        val defaultModelDir = modelManager.getModelDirectory("vosk-model-small-pl-0.22")
-        if (defaultModelDir != null && defaultModelDir.exists()) {
-            voskEngineManager.loadModel(defaultModelDir.absolutePath)
+        lifecycleScope.launch(Dispatchers.IO) {
+            modelManager.copyDefaultModelFromAssetsIfNeeded()
+            val defaultModelDir = modelManager.getModelDirectory("vosk-model-small-pl-0.22")
+            if (defaultModelDir != null && defaultModelDir.exists()) {
+                voskEngineManager.loadModel(defaultModelDir.absolutePath)
+            }
         }
 
         setContent {
