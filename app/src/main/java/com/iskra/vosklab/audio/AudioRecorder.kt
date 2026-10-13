@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import com.iskra.vosklab.metrics.RecordingSessionState
 import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
@@ -48,7 +49,8 @@ class AudioRecorder {
     @SuppressLint("MissingPermission")
     fun startRecording(
         outputFile: File,
-        listener: AudioFrameListener? = null
+        listener: AudioFrameListener? = null,
+        sessionState: RecordingSessionState? = null
     ) {
         val minBufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
         val bufferSize = maxOf(minBufferSize, SAMPLE_RATE * 2)
@@ -65,10 +67,13 @@ class AudioRecorder {
             throw IllegalStateException("Nie można zainicjalizować mikrofonu AudioRecord.")
         }
 
-        micStartMs = System.currentTimeMillis()
+        val startNow = System.currentTimeMillis()
+        micStartMs = startNow
         firstPcmMs = 0L
         speechOnsetMs = 0L
         stopMs = 0L
+
+        sessionState?.recordMicStart(startNow)
 
         isRecording = true
         audioRecord.startRecording()
@@ -87,6 +92,7 @@ class AudioRecorder {
                 if (readCount > 0) {
                     if (firstPcmMs == 0L) {
                         firstPcmMs = now
+                        sessionState?.recordFirstPcm(now)
                     }
 
                     var frameSumSq = 0.0
@@ -103,6 +109,7 @@ class AudioRecorder {
 
                     if (speechOnsetMs == 0L && frameRmsDb > 35f) {
                         speechOnsetMs = now
+                        sessionState?.recordSpeechOnset(now)
                     }
 
                     fileOutputStream.write(byteBuffer, 0, readCount * 2)
@@ -112,7 +119,10 @@ class AudioRecorder {
                 }
             }
 
-            stopMs = System.currentTimeMillis()
+            val stopNow = System.currentTimeMillis()
+            stopMs = stopNow
+            sessionState?.recordStop(stopNow)
+
             audioRecord.stop()
             audioRecord.release()
             fileOutputStream.close()
