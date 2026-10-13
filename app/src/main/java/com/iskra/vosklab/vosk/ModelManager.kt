@@ -53,14 +53,23 @@ class ModelManager(
 
     fun isValidVoskModelDirectory(modelDir: File): Boolean {
         if (!modelDir.exists() || !modelDir.isDirectory) return false
-        val names = modelDir.walkTopDown().maxDepth(3).map { it.name.lowercase() }.toSet()
-        return names.contains("am") ||
-                names.contains("graph") ||
-                names.contains("conf") ||
-                names.contains("model.conf") ||
-                names.contains("mfcc.conf") ||
-                names.contains("final.mdl") ||
-                names.contains("ivector")
+
+        // Structural validation only; import must not run inference.
+        val finalMdl = File(modelDir, "am/final.mdl")
+        if (!finalMdl.isFile || finalMdl.length() <= 0L) return false
+
+        val modelConf = File(modelDir, "conf/model.conf")
+        val mfccConf = File(modelDir, "conf/mfcc.conf")
+        val hasConfig = (modelConf.isFile && modelConf.length() > 0L) ||
+                (mfccConf.isFile && mfccConf.length() > 0L)
+
+        val graphDir = File(modelDir, "graph")
+        val hasGraph = graphDir.isDirectory &&
+                graphDir.walkTopDown().any {
+                    it.isFile && it.length() > 0L && it.extension.equals("fst", ignoreCase = true)
+                }
+
+        return hasConfig || hasGraph
     }
 
     fun copyDefaultModelFromAssetsIfNeeded() {
