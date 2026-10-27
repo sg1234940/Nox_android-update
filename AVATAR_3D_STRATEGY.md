@@ -28,6 +28,31 @@ Po zapewnieniu poprawnej geometrii, riggingu i animacji twarzy, na model nakład
    - Dostosowanie parametrów shadera do ograniczeń wydajnościowych urządzeń mobilnych Android.
 
 ---
+---
+
+## Specyfikacja Techniczna Modelu 3D i Instrukcja Pozyskania
+
+### Jak pozyskać / przygotować model 3D:
+1. **Dedykowane narzędzia i generatory:**
+   - **Blender / Maya / 3ds Max:** Tworzenie/modyfikacja siatki (mesh), nakładanie wag kości (skinning/rigging) oraz tworzenie morph targetów (blendshapes).
+   - **Ready Player Me / MakeHuman / Character Creator:** Szybkie wygenerowanie zrigowanej postaci kobiecej z obsługą standardu ARKit 52 Blendshapes.
+   - **Mixamo (Adobe):** Automatyczny rigging i dodawanie podstawowych animacji ciała.
+   - **Giełdy zasobów 3D:** CGTrader, Sketchfab, TurboSquid (szukaj: *Rigged Female Character glTF with Visemes/ARKit Blendshapes*).
+
+2. **Wymagania Techniczne Pliku (Android / Filament / Sceneview):**
+   - **Format:** `.glb` lub `.gltf` (zawierający tekstury, animacje i blendshape'y w jednym pliku).
+   - **Limit wielokątów (Polycount):** ~15,000 – 40,000 wielokątów (triangles) dla zachowania płynności na urządzeniach mobilnych.
+   - **Szkielet (Rigging):** Standardowy szkielet humanoid (Hips, Spine, Neck, Head, Shoulders, Arms, Hands).
+   - **Kluczowe Blendshape'y Twarzy (ARKit / Visemes):**
+     - `jawOpen`, `mouthSmile`, `mouthFunnel`, `mouthPucker`, `eyeBlinkLeft`, `eyeBlinkRight`
+     - Zestaw wizamów dla mowy: `A`, `E`, `I`, `O`, `U`, `M/B/P`, `F/V`.
+
+3. **Rola Dewelopera w Kodzie Appki:**
+   - Integracja silnika renderującego (Filament / Sceneview / Three.js dla Android).
+   - Sterowanie parametrami blendshape'ów w czasie rzeczywistym na podstawie danych audio z STT Vosk / TTS.
+   - Implementacja customowego shadera holograficznego (Cyan Rim Lighting, Scanlines, Glitch Noise) w kodzie Androida.
+
+---
 
 ## Podsumowanie Zasad
 - **Kolejność prac:** Najpierw prawdziwy, w pełni zrigowany model kobiety 3D ze szkieletem i mimiką twarzy → Dopiero potem nakładanie estetyki holograficznej według zatwierdzonej grafiki.
