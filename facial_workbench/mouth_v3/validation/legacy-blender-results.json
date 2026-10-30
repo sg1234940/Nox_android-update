@@ -1,0 +1,46 @@
+{
+  "status": "SOURCE_INSPECTED_NO_ANATOMICAL_CUT_PLAN",
+  "input_sha256": "e5b265cfd315ca8eaea0594b4b812b2d72ddf105361404d66b8ec6d6f1a680ff",
+  "mesh_sha256": "8ebc0a7e13fe23e098175212915b7cea3aad0d85fe02ad4cf4bf82869745b6ca",
+  "vertices": 53004,
+  "polygons": 95628,
+  "uv_layers": [
+    "UVMap"
+  ],
+  "shape_keys": [
+    "Basis",
+    "eyeBlinkLeft",
+    "eyeBlinkRight",
+    "eyesLeft",
+    "eyesRight",
+    "eyesUp",
+    "eyesDown",
+    "browInnerUp",
+    "browDownLeft",
+    "browDownRight",
+    "jawOpen",
+    "mouthSmile",
+    "mouthFrown",
+    "mouthFunnel",
+    "mouthPucker",
+    "viseme_MBP",
+    "viseme_FV",
+    "viseme_A",
+    "viseme_E",
+    "viseme_I",
+    "viseme_O",
+    "viseme_U"
+  ],
+  "Head": true,
+  "actions": [
+    "HumanDancingTwerk_Armature",
+    "HumanForwardJump_Armature",
+    "HumanHappyIdle_Armature",
+    "HumanHipHopDancing2_Armature",
+    "HumanJoyfulJump_Armature",
+    "HumanOffensiveIdle_Armature",
+    "HumanSitting3_Armature"
+  ],
+  "data_support": "SUPPORTED",
+  "source_topology": "MANIFOLD_WITH_ALLOWED_BOUNDARIES"
+}

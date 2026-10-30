@@ -1,0 +1,57 @@
+test_GLB_roundtrip_21_targets_and_seven_body_clips (__main__.BlenderTests.test_GLB_roundtrip_21_targets_and_seven_body_clips) ... INFO Draco mesh compression is available, use library at /workspace/scratch/d8792805569d/blender-4.3.2-linux-x64/4.3/python/lib/python3.11/site-packages/libextern_draco.so
+07:53:50 | INFO: Starting glTF 2.0 export
+07:53:50 | INFO: Extracting primitive: MOUTH_TEST_SOURCE_MOUTH_V3_CANDIDATE
+07:53:50 | INFO: Primitives created: 2
+07:53:50 | INFO: Finished glTF 2.0 export in 0.058843135833740234 s
+
+07:53:50 | INFO: Data are loaded, start creating Blender stuff
+07:53:50 | INFO: Blender create Mesh node MOUTH_TEST_SOURCE_MOUTH_V3_CANDIDATE
+07:53:50 | INFO: glTF import finished in 0.02s
+ok
+test_failure_after_mesh_creation_cleans_all (__main__.BlenderTests.test_failure_after_mesh_creation_cleans_all) ... ok
+test_failure_has_no_leaked_datablocks (__main__.BlenderTests.test_failure_has_no_leaked_datablocks) ... ok
+test_mutation_collision_check_killed (__main__.BlenderTests.test_mutation_collision_check_killed) ... ok
+test_new_vertex_identity_mutation_detected (__main__.BlenderTests.test_new_vertex_identity_mutation_detected) ... ok
+test_preserve_21_relative_shape_keys_and_action (__main__.BlenderTests.test_preserve_21_relative_shape_keys_and_action) ... ok
+test_reverse_winding_BLOCKED (__main__.BlenderTests.test_reverse_winding_BLOCKED) ... ok
+test_thin_shell_collision_BLOCKED (__main__.BlenderTests.test_thin_shell_collision_BLOCKED) ... ok
+test_unsupported_drivers_BLOCKED_without_deleting_mimic (__main__.BlenderTests.test_unsupported_drivers_BLOCKED_without_deleting_mimic) ... ok
+test_valid_topology_and_exact_transfer (__main__.BlenderTests.test_valid_topology_and_exact_transfer) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.301s
+
+OK
+07:53:50 | INFO: Data are loaded, start creating Blender stuff
+07:53:50 | INFO: Blender create Mesh node model
+07:53:51 | INFO: glTF import finished in 0.77s
+Blender 4.3.2 (hash 32f5fdce0a0a built 2024-12-17 01:31:14)
+MOUTH_V3_TEST_REPORT {
+  "blender": "4.3.2",
+  "tests_run": 10,
+  "failures": 0,
+  "errors": 0,
+  "real_asset": {
+    "status": "SOURCE_INSPECTED_NO_ANATOMICAL_CUT_PLAN",
+    "input_sha256": "beb034a9f13df1f05d8acaeb21f723161bf1b93e43ab23fe31dc634f30bac294",
+    "mesh_sha256": "8ebc0a7e13fe23e098175212915b7cea3aad0d85fe02ad4cf4bf82869745b6ca",
+    "vertices": 53004,
+    "polygons": 95628,
+    "uv_layers": [
+      "UVMap"
+    ],
+    "shape_keys": [],
+    "Head": true,
+    "actions": [
+      "HumanDancingTwerk_Armature",
+      "HumanForwardJump_Armature",
+      "HumanHappyIdle_Armature",
+      "HumanHipHopDancing2_Armature",
+      "HumanJoyfulJump_Armature",
+      "HumanOffensiveIdle_Armature",
+      "HumanSitting3_Armature"
+    ],
+    "data_support": "SUPPORTED",
+    "source_topology": "MANIFOLD_WITH_ALLOWED_BOUNDARIES"
+  }
+}

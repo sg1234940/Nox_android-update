@@ -1,0 +1,163 @@
+{
+  "scope": "Blender synthetic probes only; no Iskra GLB tested",
+  "blender": "4.3.2",
+  "builder_sha256": "65c2fcaf51a0564bc848625e1103c6c51979d5f23d80850f2468dd1d3097c1ed",
+  "results": [
+    {
+      "test": "FACES_ONLY_each_original_reference_valid",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "FACES_ONLY_exact_index_identity",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "FACES_ONLY_remaining_wire_edges",
+      "observed": 6,
+      "expected": 6,
+      "status": "PASS"
+    },
+    {
+      "test": "lookup_after_new_and_index_update_without_ensure",
+      "observed": "IndexError: BMElemSeq[index]: outdated internal index table, run ensure_lookup_table() first",
+      "expected": null,
+      "status": "OBSERVED"
+    },
+    {
+      "test": "after_new_all_original_identities",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "mutation_vertex_count_unchanged",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "mutation_detected_by_source_IDs",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "mutation_detected_by_reference_validity",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "builder_valid",
+      "observed": "RAW_IndexError: BMElemSeq[index]: outdated internal index table, run ensure_lookup_table() first",
+      "expected": null,
+      "status": "OBSERVED"
+    },
+    {
+      "test": "builder_valid_source_unchanged",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "builder_wrong_sha",
+      "observed": "BLOCKED: source mesh fingerprint mismatch",
+      "expected": null,
+      "status": "OBSERVED"
+    },
+    {
+      "test": "builder_wrong_sha_source_unchanged",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "builder_repeated",
+      "observed": "BLOCKED: invalid ordered cut loop",
+      "expected": null,
+      "status": "OBSERVED"
+    },
+    {
+      "test": "builder_repeated_source_unchanged",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "builder_wrong_order",
+      "observed": "BLOCKED: boundary edges differ from approved loop",
+      "expected": null,
+      "status": "OBSERVED"
+    },
+    {
+      "test": "builder_wrong_order_source_unchanged",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "builder_disconnected",
+      "observed": "BLOCKED: selected faces are disconnected",
+      "expected": null,
+      "status": "OBSERVED"
+    },
+    {
+      "test": "builder_disconnected_source_unchanged",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "builder_nested_loop",
+      "observed": "RAW_TypeError: unhashable type: 'list'",
+      "expected": null,
+      "status": "OBSERVED"
+    },
+    {
+      "test": "builder_nested_loop_source_unchanged",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "builder_wrong_direction",
+      "observed": "RAW_IndexError: BMElemSeq[index]: outdated internal index table, run ensure_lookup_table() first",
+      "expected": null,
+      "status": "OBSERVED"
+    },
+    {
+      "test": "builder_wrong_direction_source_unchanged",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "builder_reverse_winding",
+      "observed": "RAW_IndexError: BMElemSeq[index]: outdated internal index table, run ensure_lookup_table() first",
+      "expected": null,
+      "status": "OBSERVED"
+    },
+    {
+      "test": "builder_reverse_winding_source_unchanged",
+      "observed": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "test": "staging_objects_leaked",
+      "observed": 0,
+      "expected": 0,
+      "status": "PASS"
+    },
+    {
+      "test": "orphan_staging_mesh_datablocks",
+      "observed": 5,
+      "expected": null,
+      "status": "OBSERVED"
+    }
+  ]
+}
