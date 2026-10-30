@@ -1,0 +1,57 @@
+test_bad_depth (test_iskra_mouth_cut_plan.CutPlanTests.test_bad_depth) ... ok
+test_bad_face_range (test_iskra_mouth_cut_plan.CutPlanTests.test_bad_face_range) ... ok
+test_bad_order (test_iskra_mouth_cut_plan.CutPlanTests.test_bad_order) ... ok
+test_boolean_index (test_iskra_mouth_cut_plan.CutPlanTests.test_boolean_index) ... ok
+test_cli_bad_json_report (test_iskra_mouth_cut_plan.CutPlanTests.test_cli_bad_json_report) ... ok
+test_disconnected_faces (test_iskra_mouth_cut_plan.CutPlanTests.test_disconnected_faces) ... ok
+test_edge_nonmanifold (test_iskra_mouth_cut_plan.CutPlanTests.test_edge_nonmanifold) ... ok
+test_empty_faces (test_iskra_mouth_cut_plan.CutPlanTests.test_empty_faces) ... ok
+test_geometric_self_intersection_BLOCKED (test_iskra_mouth_cut_plan.CutPlanTests.test_geometric_self_intersection_BLOCKED) ... ok
+test_huge_integer (test_iskra_mouth_cut_plan.CutPlanTests.test_huge_integer) ... ok
+test_inconsistent_source_winding (test_iskra_mouth_cut_plan.CutPlanTests.test_inconsistent_source_winding) ... ok
+test_infinity (test_iskra_mouth_cut_plan.CutPlanTests.test_infinity) ... ok
+test_large_complement_not_mouth (test_iskra_mouth_cut_plan.CutPlanTests.test_large_complement_not_mouth) ... ok
+test_mapping_detects_equal_count_identity_mutation (test_iskra_mouth_cut_plan.CutPlanTests.test_mapping_detects_equal_count_identity_mutation) ... ok
+test_missing_axis (test_iskra_mouth_cut_plan.CutPlanTests.test_missing_axis) ... ok
+test_missing_depth (test_iskra_mouth_cut_plan.CutPlanTests.test_missing_depth) ... ok
+test_mutations_each_safety_statement (test_iskra_mouth_cut_plan.CutPlanTests.test_mutations_each_safety_statement) ... ok
+test_nan_axis (test_iskra_mouth_cut_plan.CutPlanTests.test_nan_axis) ... ok
+test_nan_depth (test_iskra_mouth_cut_plan.CutPlanTests.test_nan_depth) ... ok
+test_negative_index (test_iskra_mouth_cut_plan.CutPlanTests.test_negative_index) ... ok
+test_nested_faces (test_iskra_mouth_cut_plan.CutPlanTests.test_nested_faces) ... ok
+test_nested_loop (test_iskra_mouth_cut_plan.CutPlanTests.test_nested_loop) ... ok
+test_new_hole_selection_blocked (test_iskra_mouth_cut_plan.CutPlanTests.test_new_hole_selection_blocked) ... ok
+test_no_review (test_iskra_mouth_cut_plan.CutPlanTests.test_no_review) ... ok
+test_not_allowed_to_reuse_existing_opening (test_iskra_mouth_cut_plan.CutPlanTests.test_not_allowed_to_reuse_existing_opening) ... ok
+test_null_plan (test_iskra_mouth_cut_plan.CutPlanTests.test_null_plan) ... ok
+test_numeric_canonicalization (test_iskra_mouth_cut_plan.CutPlanTests.test_numeric_canonicalization) ... ok
+test_old_schema (test_iskra_mouth_cut_plan.CutPlanTests.test_old_schema) ... ok
+test_open_source_boundary_may_remain (test_iskra_mouth_cut_plan.CutPlanTests.test_open_source_boundary_may_remain) ... ok
+test_outward_axis (test_iskra_mouth_cut_plan.CutPlanTests.test_outward_axis) ... ok
+test_repeated_faces (test_iskra_mouth_cut_plan.CutPlanTests.test_repeated_faces) ... ok
+test_repeated_loop (test_iskra_mouth_cut_plan.CutPlanTests.test_repeated_loop) ... ok
+test_reversed_winding (test_iskra_mouth_cut_plan.CutPlanTests.test_reversed_winding) ... ok
+test_scattered_upper_lower (test_iskra_mouth_cut_plan.CutPlanTests.test_scattered_upper_lower) ... ok
+test_separate_closed_component_preserved (test_iskra_mouth_cut_plan.CutPlanTests.test_separate_closed_component_preserved) ... ok
+test_source_ids_exact_after_reconstruction (test_iskra_mouth_cut_plan.CutPlanTests.test_source_ids_exact_after_reconstruction) ... ok
+test_source_not_modified (test_iskra_mouth_cut_plan.CutPlanTests.test_source_not_modified) ... ok
+test_surface_limit_is_not_overridable_by_plan (test_iskra_mouth_cut_plan.CutPlanTests.test_surface_limit_is_not_overridable_by_plan) ... ok
+test_tangent_axis (test_iskra_mouth_cut_plan.CutPlanTests.test_tangent_axis) ... ok
+test_touch_protected_vertex (test_iskra_mouth_cut_plan.CutPlanTests.test_touch_protected_vertex) ... ok
+test_valid_candidate_not_automatic_authorization (test_iskra_mouth_cut_plan.CutPlanTests.test_valid_candidate_not_automatic_authorization) ... ok
+test_vertex_nonmanifold (test_iskra_mouth_cut_plan.CutPlanTests.test_vertex_nonmanifold) ... ok
+test_wrong_protected_set (test_iskra_mouth_cut_plan.CutPlanTests.test_wrong_protected_set) ... ok
+test_wrong_rim_partition (test_iskra_mouth_cut_plan.CutPlanTests.test_wrong_rim_partition) ... ok
+test_wrong_sha (test_iskra_mouth_cut_plan.CutPlanTests.test_wrong_sha) ... ok
+test_zero_area_source_patch (test_iskra_mouth_cut_plan.CutPlanTests.test_zero_area_source_patch) ... ok
+test_zero_axis (test_iskra_mouth_cut_plan.CutPlanTests.test_zero_axis) ... ok
+test_coplanar_neighbors_legal (test_iskra_mouth_cut_plan.IntersectionTests.test_coplanar_neighbors_legal) ... ok
+test_coplanar_overlap_not_legal (test_iskra_mouth_cut_plan.IntersectionTests.test_coplanar_overlap_not_legal) ... ok
+test_crossing_triangles (test_iskra_mouth_cut_plan.IntersectionTests.test_crossing_triangles) ... ok
+test_noncontact_legal (test_iskra_mouth_cut_plan.IntersectionTests.test_noncontact_legal) ... ok
+test_shared_edge_is_legal (test_iskra_mouth_cut_plan.IntersectionTests.test_shared_edge_is_legal) ... ok
+
+----------------------------------------------------------------------
+Ran 52 tests in 0.147s
+
+OK

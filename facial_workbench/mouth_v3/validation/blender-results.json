@@ -1,0 +1,29 @@
+{
+  "blender": "4.3.2",
+  "tests_run": 10,
+  "failures": 0,
+  "errors": 0,
+  "real_asset": {
+    "status": "SOURCE_INSPECTED_NO_ANATOMICAL_CUT_PLAN",
+    "input_sha256": "beb034a9f13df1f05d8acaeb21f723161bf1b93e43ab23fe31dc634f30bac294",
+    "mesh_sha256": "8ebc0a7e13fe23e098175212915b7cea3aad0d85fe02ad4cf4bf82869745b6ca",
+    "vertices": 53004,
+    "polygons": 95628,
+    "uv_layers": [
+      "UVMap"
+    ],
+    "shape_keys": [],
+    "Head": true,
+    "actions": [
+      "HumanDancingTwerk_Armature",
+      "HumanForwardJump_Armature",
+      "HumanHappyIdle_Armature",
+      "HumanHipHopDancing2_Armature",
+      "HumanJoyfulJump_Armature",
+      "HumanOffensiveIdle_Armature",
+      "HumanSitting3_Armature"
+    ],
+    "data_support": "SUPPORTED",
+    "source_topology": "MANIFOLD_WITH_ALLOWED_BOUNDARIES"
+  }
+}

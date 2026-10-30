@@ -1,0 +1,9 @@
+{
+  "source_sha256": "beb034a9f13df1f05d8acaeb21f723161bf1b93e43ab23fe31dc634f30bac294",
+  "generated_sha256": "e5b265cfd315ca8eaea0594b4b812b2d72ddf105361404d66b8ec6d6f1a680ff",
+  "original_binary_prefix_unchanged": true,
+  "animations_json_unchanged": true,
+  "skins_materials_images_json_unchanged": true,
+  "animations": 7,
+  "targets": 21
+}
