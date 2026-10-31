@@ -62,14 +62,15 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   header.addView(label("Iskra Lab",23f),LinearLayout.LayoutParams(0,dp(56),1f))
   header.addView(button("⚙"){connectionSettings()},LinearLayout.LayoutParams(dp(60),dp(52)))
   overlay.addView(header);overlay.addView(View(this),LinearLayout.LayoutParams(-1,0,1f))
-  notice=label("Dotknij mikrofonu, aby mówić",13f);notice.gravity=Gravity.CENTER;notice.background=panel(130);overlay.addView(notice)
+  notice=label("",12f).apply {visibility=View.GONE;setPadding(dp(12),dp(4),dp(12),0);accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE}
   bubbles=column();transcript=ScrollView(this).apply {addView(bubbles);visibility=View.GONE}
   overlay.addView(transcript,LinearLayout.LayoutParams(-1,dp(220)))
-  val composer=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL;background=panel(145);setPadding(dp(8),dp(4),dp(4),dp(4))}
+  val composer=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL;setPadding(dp(8),dp(4),dp(4),dp(4))}
   input=EditText(this).apply {hint="Napisz do Iskry…";setHintTextColor(0xff94aec8.toInt());setTextColor(Color.WHITE);background=null;maxLines=4;minLines=1;setSingleLine(false)}
   action=ImageButton(this).apply {background=GradientDrawable().apply{shape=GradientDrawable.OVAL;setColor(0xff00bde9.toInt())};imageTintList=android.content.res.ColorStateList.valueOf(0xff082137.toInt())}
   composer.addView(input,LinearLayout.LayoutParams(0,-2,1f));composer.addView(action,LinearLayout.LayoutParams(dp(52),dp(52)))
-  overlay.addView(composer,LinearLayout.LayoutParams(-1,-2).apply {setMargins(dp(10),dp(8),dp(10),dp(8))})
+  val footer=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL;background=panel(145);addView(notice);addView(composer)}
+  overlay.addView(footer,LinearLayout.LayoutParams(-1,-2).apply {setMargins(dp(10),dp(8),dp(10),dp(8))})
   shade=View(this).apply {setBackgroundColor(0x77000000);visibility=View.GONE;setOnClickListener{closeDrawer()}};root.addView(shade,FrameLayout.LayoutParams(-1,-1))
   drawer=column().apply {setBackgroundColor(0xf5152333.toInt());visibility=View.GONE};root.addView(ScrollView(this).apply{addView(drawer);tag="drawer";visibility=View.GONE},FrameLayout.LayoutParams(dp(292),-1,Gravity.START))
   lab=AvatarLabControls(this,avatar,begin={newTurn()},send=::emit,camera={profile.angle to profile.face},setCamera={a,f->profile=profile.copy(angle=a,face=f);applyCamera();save()},refresh={})
@@ -78,13 +79,13 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   action.setOnClickListener {if(input.text.isNotBlank())sendTyped() else if(listening&&!talking){voice?.finishListening();sayStatus("Kończę nagranie…")} else if(talking||lab.busy){interrupt();startVoice()}else startVoice()}
   input.setOnFocusChangeListener {_,focus->if(focus){interrupt();textMode=true;transcript.visibility=View.VISIBLE;refreshAction()}}
   input.addTextChangedListener(object:TextWatcher {override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){};override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){refreshAction()};override fun afterTextChanged(s:Editable?){} })
-  avatar.onStatus={message->notice.text=message;if(!initializedAppearance && message.startsWith("Model gotowy")){initializedAppearance=true;applyProfileModel();applyBackground()}}
+  avatar.onStatus={message->if(message.startsWith("Model gotowy")){sayStatus("");if(!initializedAppearance){initializedAppearance=true;applyProfileModel();applyBackground()}}else sayStatus(message)}
   installGestures();applyCamera();avatar.setAppearance(profile.hologram,profile.brightness);refreshAction();buildDrawer()
   root.setOnApplyWindowInsetsListener {v,insets->v.setPadding(0,insets.systemWindowInsetTop,0,insets.systemWindowInsetBottom);insets}
   setContentView(root);root.requestApplyInsets()
  }
  private fun refreshAction(){val mode=profile.action(input.text.isNotBlank(),listening);action.setImageResource(when(mode){"SEND"->android.R.drawable.ic_menu_send;"STOP"->android.R.drawable.ic_media_pause;else->android.R.drawable.ic_btn_speak_now});action.contentDescription=when(mode){"SEND"->"Wyślij";"STOP"->"Przerwij nagrywanie";else->"Mikrofon"}}
- private fun sayStatus(text:String){notice.text=text}
+ private fun sayStatus(text:String){notice.text=text;notice.visibility=if(text.isBlank()||text=="Gotowe")View.GONE else View.VISIBLE}
  private fun save(){try{preferences.write(profile)}catch(_:Exception){sayStatus("Nie zapisano ustawień. Dotychczasowy zapis pozostaje zachowany.")}}
  private fun applyCamera(){avatar.setCamera(profile.angle,profile.face);avatar.setZoom(profile.zoom)}
  private fun interrupt(){handsFree=false;life++;voice?.stop();listening=false;talking=false;playback=null;if(::lab.isInitialized)lab.cancel();emit(AvatarController.Command.Interrupted);refreshAction()}
@@ -133,7 +134,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
    LabVoice.State.FAILED->{listening=false;if(!talking)handsFree=false}
    LabVoice.State.IDLE->{listening=false;if(!talking)emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.IDLE))}
    else->Unit}
-  notice.background=panel(140).apply {setStroke(dp(1),when(value){LabVoice.State.LISTENING->0xff24d2ed.toInt();LabVoice.State.SPEAKING->0xff57e2a1.toInt();LabVoice.State.RECOGNIZING,LabVoice.State.SYNTHESIZING->0xffffd468.toInt();else->0xff35546e.toInt()})}
+  notice.setTextColor(when(value){LabVoice.State.LISTENING->0xff24d2ed.toInt();LabVoice.State.SPEAKING->0xff57e2a1.toInt();LabVoice.State.RECOGNIZING,LabVoice.State.SYNTHESIZING->0xffffd468.toInt();else->0xffe4edf6.toInt()})
   if(message.isNotBlank())sayStatus(message);refreshAction()
  }
  override fun transcript(text:String){if(foreground&&handsFree){listening=false;submit(text)}}
