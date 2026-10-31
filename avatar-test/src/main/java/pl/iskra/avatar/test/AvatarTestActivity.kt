@@ -30,7 +30,8 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
  private lateinit var avatar:AvatarSurfaceView;private lateinit var lab:AvatarLabControls
  private lateinit var root:FrameLayout;private lateinit var drawer:LinearLayout;private lateinit var shade:View
  private lateinit var input:EditText;private lateinit var action:ImageButton;private lateinit var notice:TextView
- private lateinit var bubbles:LinearLayout;private lateinit var transcript:ScrollView
+ private lateinit var bubbles:LinearLayout;private lateinit var transcript:ScrollView;private lateinit var footer:LinearLayout
+ private var controlsPanel:LinearLayout?=null
  private lateinit var preferences:LabPreferences
  private var profile=LabPresentation();private var voices=listOf<LabVoice.Voice>();private var ears=listOf<String>()
  private var voice:LabVoice?=null;private var foreground=false;private var handsFree=false
@@ -59,7 +60,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   root.addView(overlay,FrameLayout.LayoutParams(-1,-1))
   val header=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL}
   header.addView(button("☰"){openDrawer()},LinearLayout.LayoutParams(dp(60),dp(52)))
-  header.addView(label("Iskra Lab 0.6.2",18f),LinearLayout.LayoutParams(0,dp(56),1f))
+  header.addView(label("Iskra Lab 0.6.3",18f),LinearLayout.LayoutParams(0,dp(56),1f))
   header.addView(button("⚙"){connectionSettings()},LinearLayout.LayoutParams(dp(60),dp(52)))
   overlay.addView(header);overlay.addView(View(this),LinearLayout.LayoutParams(-1,0,1f))
   notice=label("",12f).apply {visibility=View.GONE;setPadding(dp(12),dp(4),dp(12),0);accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE}
@@ -69,7 +70,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   input=EditText(this).apply {hint="Napisz do Iskry…";setHintTextColor(0xff94aec8.toInt());setTextColor(Color.WHITE);background=null;maxLines=4;minLines=1;setSingleLine(false)}
   action=ImageButton(this).apply {background=GradientDrawable().apply{shape=GradientDrawable.OVAL;setColor(0xff00bde9.toInt())};imageTintList=android.content.res.ColorStateList.valueOf(0xff082137.toInt())}
   composer.addView(input,LinearLayout.LayoutParams(0,-2,1f));composer.addView(action,LinearLayout.LayoutParams(dp(52),dp(52)))
-  val footer=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL;background=panel(145);addView(notice);addView(composer)}
+  footer=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL;background=panel(145);addView(notice);addView(composer)}
   overlay.addView(footer,LinearLayout.LayoutParams(-1,-2).apply {setMargins(dp(10),dp(8),dp(10),dp(8))})
   shade=View(this).apply {setBackgroundColor(0x77000000);visibility=View.GONE;setOnClickListener{closeDrawer()}};root.addView(shade,FrameLayout.LayoutParams(-1,-1))
   drawer=column().apply {setBackgroundColor(0xf5152333.toInt());visibility=View.GONE};root.addView(ScrollView(this).apply{addView(drawer);tag="drawer";visibility=View.GONE},FrameLayout.LayoutParams(dp(292),-1,Gravity.START))
@@ -82,6 +83,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   avatar.onStatus={message->if(message.startsWith("Model gotowy")){sayStatus("");if(!initializedAppearance){initializedAppearance=true;applyProfileModel();applyBackground()}}else sayStatus(message)}
   installGestures();applyCamera();avatar.setAppearance(profile.hologram,profile.brightness);refreshAction();buildDrawer()
   root.setOnApplyWindowInsetsListener {v,insets->v.setPadding(0,insets.systemWindowInsetTop,0,insets.systemWindowInsetBottom);insets}
+  root.addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->layoutControls()}
   setContentView(root);root.requestApplyInsets()
  }
  private fun refreshAction(){val mode=profile.action(input.text.isNotBlank(),listening);action.setImageResource(when(mode){"SEND"->android.R.drawable.ic_menu_send;"STOP"->android.R.drawable.ic_media_pause;else->android.R.drawable.ic_btn_speak_now});action.contentDescription=when(mode){"SEND"->"Wyślij";"STOP"->"Przerwij nagrywanie";else->"Mikrofon"}}
@@ -153,9 +155,9 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   drawer.addView(button("Jasność hologramu"){closeDrawer();sliderDialog("Jasność hologramu",profile.brightness,.2f,2f){profile=profile.copy(brightness=it);avatar.setAppearance(profile.hologram,it);save()}})
   drawer.addView(button("Tło"){closeDrawer();backgroundSettings()});drawer.addView(button("Głos i język"){closeDrawer();voiceSettings()});drawer.addView(button("Połączenie"){closeDrawer();connectionSettings()})
  }
- private fun openDrawer(){interrupt();(getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(input.windowToken,0);drawerOpen=true;shade.visibility=View.VISIBLE;val v=root.findViewWithTag<View>("drawer");v.visibility=View.VISIBLE;drawer.visibility=View.VISIBLE;v.translationX=-dp(292).toFloat();v.animate().translationX(0f).setDuration(160).start()}
+ private fun openDrawer(){closeControls();interrupt();(getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(input.windowToken,0);drawerOpen=true;shade.visibility=View.VISIBLE;val v=root.findViewWithTag<View>("drawer");v.visibility=View.VISIBLE;drawer.visibility=View.VISIBLE;v.translationX=-dp(292).toFloat();v.animate().translationX(0f).setDuration(160).start()}
  private fun closeDrawer(){drawerOpen=false;shade.visibility=View.GONE;root.findViewWithTag<View>("drawer").visibility=View.GONE}
- override fun onBackPressed(){if(drawerOpen)closeDrawer()else super.onBackPressed()}
+ override fun onBackPressed(){if(controlsPanel!=null)closeControls()else if(drawerOpen)closeDrawer()else super.onBackPressed()}
  private fun connectionSettings(){interrupt();val c=column();val address=EditText(this).apply{hint="Adres bramki HTTPS";setSingleLine(true);setText(connections.getString("url",""))};val passwords=GatewayPasswordStore(this)
   val password=EditText(this).apply{hint="Hasło dostępu";setSingleLine(true);inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD;setText(passwords.read(address.text.toString()))}
   c.addView(address);c.addView(password);val dialog=AlertDialog.Builder(this).setTitle("Połączenie z Iskrą").setView(c).setPositiveButton("Zapisz",null).setNegativeButton("Anuluj",null).create()
@@ -172,11 +174,55 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
  }
  private fun spinner(values:List<String>,selected:Int,onSelect:(Int)->Unit)=Spinner(this).apply{adapter=ArrayAdapter(this@AvatarTestActivity,android.R.layout.simple_spinner_dropdown_item,values);setSelection(selected.coerceAtLeast(0));var last=selected.coerceAtLeast(0);onItemSelectedListener=object:AdapterView.OnItemSelectedListener{override fun onItemSelected(p:AdapterView<*>?,v:View?,position:Int,id:Long){if(position!=last && position==this@apply.selectedItemPosition){last=position;onSelect(position)}};override fun onNothingSelected(p:AdapterView<*>?){} }}
  private fun sliderDialog(title:String,value:Float,min:Float,max:Float,changed:(Float)->Unit){interrupt();val bar=SeekBar(this).apply{this.max=100;progress=((value-min)/(max-min)*100).roundToInt().coerceIn(0,100)};bar.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{override fun onProgressChanged(b:SeekBar?,p:Int,user:Boolean){if(user)changed(min+(max-min)*p/100f)};override fun onStartTrackingTouch(b:SeekBar?){};override fun onStopTrackingTouch(b:SeekBar?){} });AlertDialog.Builder(this).setTitle(title).setView(bar).setPositiveButton("Gotowe",null).show()}
- private fun manualControls(){interrupt();val c=column();c.addView(label("Ręczne sterowanie przejmuje awatara"));c.addView(button("Poza bazowa i reset mimiki"){emit(AvatarController.Command.Reset)})
-  c.addView(spinner(listOf("Poza bazowa")+AvatarController.ANIMATIONS,(avatar.controller.snapshot().animation?.let{AvatarController.ANIMATIONS.indexOf(it)+1}?:0)){emit(AvatarController.Command.Animation(if(it==0)null else AvatarController.ANIMATIONS[it-1]))})
-  c.addView(button("Zamroź / wznów ciało"){emit(AvatarController.Command.BodyPaused(!avatar.controller.snapshot().bodyPaused))})
-  AvatarController.MORPHS.forEach{name->c.addView(button(name){sliderDialog(name,avatar.controller.snapshot().weights[AvatarController.MORPHS.indexOf(name)],0f,1f){emit(AvatarController.Command.Weight(name,it))}})}
-  AlertDialog.Builder(this).setTitle("Sterowanie").setView(ScrollView(this).apply{addView(c)}).setPositiveButton("Zamknij",null).show()
+ private fun layoutControls(){
+  val panel=controlsPanel ?: return
+  val available=(root.height-root.paddingTop-root.paddingBottom).coerceAtLeast(1)
+  val height=minOf(dp(300),(available*.42f).roundToInt()).coerceAtLeast(1)
+  if(panel.layoutParams.height!=height)panel.layoutParams=FrameLayout.LayoutParams(-1,height,Gravity.BOTTOM)
+  val viewport=(available-height).coerceAtLeast(1)
+  if(avatar.layoutParams.height!=viewport)avatar.layoutParams=FrameLayout.LayoutParams(-1,viewport,Gravity.TOP)
+ }
+ private fun closeControls(){
+  val panel=controlsPanel ?: return
+  controlsPanel=null;root.removeView(panel)
+  avatar.layoutParams=FrameLayout.LayoutParams(-1,-1)
+  footer.visibility=View.VISIBLE;transcript.visibility=if(textMode)View.VISIBLE else View.GONE
+  avatar.invalidatePreview()
+ }
+ private fun manualControls(){
+  interrupt();if(controlsPanel!=null)return
+  (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(input.windowToken,0)
+  input.clearFocus();footer.visibility=View.GONE;transcript.visibility=View.GONE
+  val panel=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL;background=panel(215)}
+  val top=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL}
+  top.addView(label("Sterowanie na żywo",16f),LinearLayout.LayoutParams(0,dp(48),1f))
+  top.addView(button("Zamknij"){closeControls()},LinearLayout.LayoutParams(dp(100),dp(48)))
+  panel.addView(top)
+  val c=column();val scroll=ScrollView(this).apply {addView(c)}
+  panel.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
+  val views=LinearLayout(this)
+  views.addView(button("Twarz"){profile=profile.copy(face=true);applyCamera();save()},LinearLayout.LayoutParams(0,-2,1f))
+  views.addView(button("Postać"){profile=profile.copy(face=false);applyCamera();save()},LinearLayout.LayoutParams(0,-2,1f))
+  c.addView(views)
+  val bars=mutableListOf<SeekBar>()
+  val animations=spinner(listOf("Poza bazowa")+AvatarController.ANIMATIONS,(avatar.controller.snapshot().animation?.let{AvatarController.ANIMATIONS.indexOf(it)+1}?:0)){emit(AvatarController.Command.Animation(if(it==0)null else AvatarController.ANIMATIONS[it-1]))}
+  c.addView(animations)
+  val pause=button(if(avatar.controller.snapshot().bodyPaused)"Wznów ciało" else "Zamroź ciało"){}
+  pause.setOnClickListener {interrupt();val next=!avatar.controller.snapshot().bodyPaused;emit(AvatarController.Command.BodyPaused(next));pause.text=if(next)"Wznów ciało" else "Zamroź ciało"}
+  c.addView(pause)
+  c.addView(button("Poza bazowa i reset mimiki"){interrupt();emit(AvatarController.Command.Reset);bars.forEach{it.progress=0};animations.setSelection(0);pause.text="Zamroź ciało"})
+  AvatarController.MORPHS.forEachIndexed {index,name->
+   val title=label(name,14f);c.addView(title)
+   val bar=SeekBar(this).apply {max=100;progress=(avatar.controller.snapshot().weights[index]*100).roundToInt().coerceIn(0,100);contentDescription=name}
+   title.text="$name · ${bar.progress}%"
+   bar.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
+    override fun onProgressChanged(b:SeekBar?,p:Int,user:Boolean){title.text="$name · $p%";if(user)emit(AvatarController.Command.Weight(name,p/100f))}
+    override fun onStartTrackingTouch(b:SeekBar?){interrupt()}
+    override fun onStopTrackingTouch(b:SeekBar?){}
+   })
+   bars.add(bar);c.addView(bar,LinearLayout.LayoutParams(-1,dp(48)))
+  }
+  controlsPanel=panel;root.addView(panel,FrameLayout.LayoutParams(-1,dp(300),Gravity.BOTTOM));layoutControls();avatar.invalidatePreview()
  }
  private fun preview(){interrupt();avatar.capturePreview{image,error->if(!foreground){image?.bitmap?.recycle();return@capturePreview};if(image==null)sayStatus("Podgląd niedostępny: $error")else{val v=ImageView(this).apply{setImageBitmap(image.bitmap);adjustViewBounds=true};AlertDialog.Builder(this).setTitle("Kadr z renderera").setView(v).setPositiveButton("Zamknij",null).create().apply{setOnDismissListener{v.setImageDrawable(null);image.bitmap.recycle();previewDialog=null};previewDialog=this;show()}}}}
  private fun modelFile(id:String)=File(filesDir,"avatar_models/$id.glb")

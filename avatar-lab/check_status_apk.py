@@ -38,7 +38,15 @@ def check(apk, dexdump, version):
     assert '.sayStatus:' in ready[0], 'Stale DEX: ready handler bypasses hide policy'
     assert '.setText:' not in ready[0], 'Stale DEX: ready handler writes banner directly'
     assert '"Iskra Lab ' + version + '"' in screen, 'Visible build version does not match'
+    controls = next(m for m in methods if re.search(r"name\s+: 'manualControls'", m))
+    assert 'Landroid/widget/SeekBar;' in controls, 'Controls must expose inline live sliders'
+    assert 'Landroid/app/AlertDialog' not in controls, 'Controls must not obscure the avatar with a dialog'
+    assert '.sliderDialog:' not in controls, 'Controls must not open nested slider dialogs'
+    assert '.layoutControls:' in controls, 'Controls must reserve a visible avatar viewport'
+    viewport = next(m for m in methods if re.search(r"name\s+: 'layoutControls'", m))
+    assert viewport.count('.setLayoutParams:') >= 2, 'Panel and avatar viewport must resize separately'
     print('PASS: packaged screen hides ready status and contains visible build ' + version)
+    print('PASS: packaged manual controls use inline sliders and reserve the avatar viewport')
 
 
 if __name__ == '__main__':

@@ -1,3 +1,11 @@
+# Aktualizacja 0.6.3 — sterowanie z widocznym awatarem
+
+Pełnoekranowy dialog sterowania i zagnieżdżone okna suwaków zostały zastąpione dolnym panelem. Wszystkie 21 suwaków jest dostępne bezpośrednio w przewijanej liście i działa na żywo. Panel ma maksymalnie 42% dostępnej wysokości, a SurfaceView dostaje pozostałą przestrzeń nad panelem. Nie przyciemnia się sceny. W panelu są widok twarzy/postaci, animacje, zamrożenie i reset. Zamknięcie, Wstecz i otwarcie menu przywracają pełny viewport i pole rozmowy; ręczne sterowanie nadal przerywa próbę Iskry.
+
+Pełny APK 0.6.3-test / kod 9: 146086498 bajtów, SHA-256 `fa2a0c9febe994430f58b76f7608e9532d110ccc2a5429df5e2e8e073b98314d`. Clean modułu klienta, build bez cache, 13/13 testów klienta/finality, apksigner i zipalign 16 KiB PASS. Kontrola gotowego DEX sprawdza suwaki inline, brak AlertDialog i sliderDialog w manualControls oraz osobny resize panelu i awatara. Odrzuca poprzedni wariant dialogowy 0.6.2, przyjmuje 0.6.3. Nadal wymaga potwierdzenia układu i dotyku na telefonie. Backend, głos i model bez zmian, bez merge/deployu.
+
+---
+
 # Aktualizacja 0.6.2 — zweryfikowany kod w APK
 
 Zgłoszenie z telefonu potwierdziło pasek mimo wersji 0.6.1. Weryfikacja DEX starego APK ujawniła, że manifest miał wersję 0.6.1, ale ekran nadal zawierał wcześniejsze sayStatus bez setVisibility i callback bezpośrednio ustawiający tekst. Wcześniejsze zapewnienie o poprawce w artefakcie było błędne; testy JVM i numer wersji nie wystarczyły.
