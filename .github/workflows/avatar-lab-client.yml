@@ -18,12 +18,18 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
       - name: Install pinned platform
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          manager=$(find "$sdk/cmdline-tools" -path '*/bin/sdkmanager' | sort -V | tail -n 1)
+          test -x "$manager"
+          yes | "$manager" --licenses > /dev/null || true
+          "$manager" --install 'platforms;android-36' 'build-tools;36.0.0'
       - name: Compile both Android modules and test real HTTPS client
         run: gradle -p avatar-lab :avatar-test:testDebugUnitTest --tests '*AvatarLabClientTest'
       - name: Preserve test reports
