@@ -38,3 +38,19 @@ Model SHA256: `451ebc87620b95500163716e77b7433d6ef7d765a2b33391a0df08f2b921848c`
 ## Evidence and limits
 
 JVM checks cover controller/state, original GLB contract, all command names/limits, requested vs rendered pose, replay budget/order and real local HTTPS continuation/no-retry/finality behavior. Server tests exercise an actual local HTTP streaming route with scripted provider: command → phone reply containing a 180665-byte JPEG → native vision → another command → final. This does not prove the production model's choices or physical Android PixelCopy/Filament behavior. Those remain phone/runtime tests. No server merge, deployment, flag activation or production APK change is included in this candidate.
+
+# Access password (candidate v0.6)
+
+The server and both Android clients are being updated together to require the
+owner's changeable chat password. The lab has a masked password field, encrypts
+the saved value using Android Keystore AES-GCM and binds it to the chosen HTTPS
+origin. It sends the password as HTTP Basic authentication (`iskra` is the fixed
+protocol username), never as a message or a field in the tool transcript.
+
+There is no default production address. Local preview remains network-free.
+The password-protected server fails closed if `ISKRA_CHAT_PASSWORD` is missing.
+Do not deploy it before installing/configuring and testing the updated clients.
+Do not enter a real password into Git, this document or a chat message.
+
+The historical APK v0.5 linked in the PR does not include authentication. A v0.6
+APK is still required; source compilation/JVM checks are not a phone test.

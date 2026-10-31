@@ -10,15 +10,20 @@ import java.net.URI
 import java.util.concurrent.TimeUnit
 
 /** The existing Iskra backend, not a second provider or a second persona. No POST retries. */
-class AvatarLabClient internal constructor(client: OkHttpClient? = null) {
-    private val http = client ?: OkHttpClient.Builder().retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false)
+class AvatarLabClient internal constructor(client: OkHttpClient? = null, private val password: String = "") {
+    private val http = (client ?: OkHttpClient()).newBuilder().retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false)
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(240, TimeUnit.SECONDS).callTimeout(240, TimeUnit.SECONDS).build()
     @Volatile private var active: okhttp3.Call? = null
     @Volatile private var cancelled = false
     fun cancel() { cancelled = true; active?.cancel() }
     private fun checkCurrent(current: () -> Boolean) { check(!cancelled && current()) { "Anulowano sterowanie." } }
     private fun request(request: Request, current: () -> Boolean): okhttp3.Response {
-        checkCurrent(current); val call = http.newCall(request); active = call
+        checkCurrent(current)
+        val authorized = if (password.isNotEmpty() && request.method == "POST") {
+            require(request.url.isHttps) { "Hasło można wysłać tylko przez HTTPS." }
+            request.newBuilder().header("Authorization", okhttp3.Credentials.basic("iskra", password, Charsets.UTF_8)).build()
+        } else request
+        val call = http.newCall(authorized); active = call
         if (cancelled) call.cancel()
         return call.execute()
     }
@@ -41,6 +46,7 @@ class AvatarLabClient internal constructor(client: OkHttpClient? = null) {
             var done: JSONObject? = null
             request(Request.Builder().url(endpoint).header("Accept", "application/x-ndjson")
                 .post(input.toString().toRequestBody("application/json; charset=utf-8".toMediaType())).build(), current).use { response ->
+                check(response.code != 401) { "Brak lub nieprawidłowe hasło dostępu. Sprawdź ustawienia połączenia." }
                 check(response.isSuccessful) { "Bramka: HTTP ${response.code}. Niczego nie ponawiam automatycznie." }
                 val source = response.body?.source() ?: error("Pusty strumień.")
                 while (!source.exhausted()) {

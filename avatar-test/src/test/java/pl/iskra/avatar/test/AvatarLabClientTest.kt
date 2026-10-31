@@ -10,14 +10,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AvatarLabClientTest {
-    private fun fixture(work: (MockWebServer, AvatarLabClient) -> Unit) {
+    private fun fixture(password: String = "", work: (MockWebServer, AvatarLabClient) -> Unit) {
         val certificate = HeldCertificate.Builder().commonName("localhost").addSubjectAlternativeName("localhost").build()
         val server = MockWebServer(); val serverTls = HandshakeCertificates.Builder().heldCertificate(certificate).build()
         server.useHttps(serverTls.sslSocketFactory(), false); server.start()
         val trust = HandshakeCertificates.Builder().addTrustedCertificate(certificate.certificate).build()
         val http = OkHttpClient.Builder().sslSocketFactory(trust.sslSocketFactory(), trust.trustManager)
             .retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false).build()
-        try { work(server, AvatarLabClient(http)) } finally { server.shutdown() }
+        try { work(server, AvatarLabClient(http, password)) } finally { server.shutdown() }
     }
     private fun advertised() = MockResponse().setResponseCode(204).setHeader("X-Iskra-Avatar-Features", "avatar-control/v1")
     private val receipt = "op-11111111-1111-4111-8111-111111111111"
@@ -26,6 +26,24 @@ class AvatarLabClientTest {
             .put("arguments", JSONObject("""{"action":"SET","weights":{"mouthSmile":0.3},"preview":false}"""))).toString()
     private fun final() = JSONObject().put("type", "done").put("final_response", JSONObject().put("finish_reason", "stop")
         .put("server_continuations_complete", true).put("text", "Gotowe")).toString()
+    @Test fun passwordIsOnlyInHeadersOfEveryPostIncludingContinuation() = fixture(" Zażółć: gęślą ") { server, client ->
+        server.enqueue(advertised()); server.enqueue(MockResponse().setBody(request() + "\n")); server.enqueue(MockResponse().setBody(final() + "\n"))
+        client.run(server.url("/").toString(), "c", 1, "uśmiech", { true }, {}, { JSONObject().put("ok", true) })
+        assertNull(server.takeRequest().getHeader("Authorization"))
+        repeat(2) {
+            val req = server.takeRequest()
+            assertEquals(okhttp3.Credentials.basic("iskra", " Zażółć: gęślą ", Charsets.UTF_8), req.getHeader("Authorization"))
+            assertFalse(req.body.readUtf8().contains("gęślą"))
+        }
+    }
+    @Test fun incorrectPasswordDoesNotRetryOrExecuteAndShowsAUsefulMessage() = fixture("wrong") { server, client ->
+        server.enqueue(advertised()); server.enqueue(MockResponse().setResponseCode(401)); var executed = 0
+        val error = assertThrows(IllegalStateException::class.java) {
+            client.run(server.url("/").toString(), "c", 1, "x", { true }, {}, { executed++; JSONObject() })
+        }
+        assertTrue(error.message.orEmpty().contains("hasło")); assertFalse(error.message.orEmpty().contains("wrong"))
+        assertEquals(0, executed); assertEquals(2, server.requestCount)
+    }
     @Test fun realTlsTransportPreservesReceiptOwnerAndExactCallResultPair() = fixture { server, client ->
         server.enqueue(advertised()); server.enqueue(MockResponse().setBody(request() + "\n")); server.enqueue(MockResponse().setBody(final() + "\n"))
         var executed = 0

@@ -42,8 +42,16 @@ class AvatarLabControls(private val activity: Activity, private val avatar: Avat
 
     fun install(parent: LinearLayout) {
         val prefs = activity.getSharedPreferences("avatar_lab_connection", 0)
-        val address = EditText(activity).apply { setSingleLine(true); hint = "Adres bramki HTTPS"; setText(prefs.getString("url", "https://nox-android.onrender.com")); contentDescription = "Adres bramki Iskry" }
+        val address = EditText(activity).apply { setSingleLine(true); hint = "Adres bramki HTTPS"; setText(prefs.getString("url", "")); contentDescription = "Adres bramki Iskry" }
         parent.addView(address)
+        val passwords = GatewayPasswordStore(activity)
+        val password = EditText(activity).apply {
+            setSingleLine(true); hint = "Hasło dostępu do Iskry"; contentDescription = "Hasło dostępu do Iskry"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
+            setText(passwords.read(address.text.toString()))
+        }
+        parent.addView(password)
         val input = EditText(activity).apply { hint = "Napisz Iskrze, jaki ruch chcesz sprawdzić"; minLines = 1; maxLines = 3 }
         parent.addView(input)
         sendButton = Button(activity).apply { text = "Wyślij do Iskry"; isAllCaps = false }
@@ -54,9 +62,11 @@ class AvatarLabControls(private val activity: Activity, private val avatar: Avat
             val text = input.text.toString().trim()
             if (text.isBlank() || text.length > 8000) { output.text = "Wpisz wiadomość do 8000 znaków."; return@setOnClickListener }
             val base = address.text.toString().trim()
+            val accessPassword = password.text.toString()
+            try { passwords.write(base, accessPassword) } catch (_: Exception) { output.text = "Nie zapisano hasła. Sprawdź adres HTTPS i format hasła (do 256 znaków)."; return@setOnClickListener }
             prefs.edit().putString("url", base).apply()
             cancel(); val owner = generation.incrementAndGet(); begin(); busy = true; sendButton.isEnabled = false
-            val attempt = AvatarLabClient(); client = attempt; val current = { generation.get() == owner && inForeground }
+            val attempt = AvatarLabClient(password = accessPassword); client = attempt; val current = { generation.get() == owner && inForeground }
             val calls = Protocol.Calls(); val rev = ++revision; output.text = "Łączę z Iskrą…"
             worker.execute {
                 val streamed = StringBuilder()
