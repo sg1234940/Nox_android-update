@@ -1,3 +1,27 @@
+# Iskra Lab 0.6 — rozmowa, wygląd i podgląd
+
+Samodzielna aplikacja `pl.iskra.avatar.test.v4`, wersja `0.6-test` (6), Android 8+ / ARM64 w pełnym wariancie. Nie zastępuje osobowości ani pamięci Iskry: korzysta z tej samej bramki backendu. Adres HTTPS i hasło wpisuje właściciel w ustawieniach; brak zaszytego adresu produkcji.
+
+Lewe wysuwane menu: cała postać/twarz, kamera, rozmowa, ręczne sterowanie, podgląd, awatar, ubiór, styl zwykły/holograficzny, jasność, tło, głos/język i połączenie. Mikrofon jest po prawej; po wpisaniu tekstu zmienia się w Wyślij. Tryb głosu nie pokazuje chmurek, tekst ma półprzezroczyste chmurki i pole wpisywania. Klawiatura pozostaje systemowa.
+
+Import awatara lub wariantu ubioru wymaga samowystarczalnego GLB zgodnego z kontraktem Iskry (21 morph targets i 7 animacji). To pełne warianty modelu, nie automatyczne przebieranie dowolnego modelu. Zdjęcie wybrane jako tło trafia także do podglądu dla Iskry. Model wbudowany pozostaje dokładnie tym z wersji 0.4/0.5.
+
+## Dwa warianty budowania
+
+Publiczny projekt `gradle -p avatar-lab` kompiluje renderer i klienta tekstowego. Nie zawiera prywatnego silnika głosu. Gdy adapter głosu jest nieobecny, interfejs mówi o tym wprost.
+
+Pełna kompilacja do testu telefonu dołącza istniejący Promyk/Vosk/Piper przez interfejs `LabVoice` oraz moduł `:avatar-voice` z projektu głównego. Nie kopiujemy prywatnego kodu do publicznego repo. Głos wymaga importu rzeczywistych modeli przez menu Głos i język; domyślnym językiem jest polski. Wyjście głosowe odtwarza wyłącznie zatwierdzony plan finality/v2 z backendu, a nie dowolny tekst ze strumienia. Usta korzystają z energii PCM i zegara rzeczywistego odtwarzacza. Obsługa przerywania podczas mówienia wymaga działającego AEC; brak AEC jest jawny, potem dostępne jest zwykłe nagrywanie.
+
+## Weryfikacja
+
+Lokalnie na pełnej kompilacji z prawdziwym GLB: SDK 49/49, klient i finality 13/13, Promyk 26/26. Podpis APK 0.6 zgadza się z 0.5; model ma SHA-256 `451ebc87620b95500163716e77b7433d6ef7d765a2b33391a0df08f2b921848c`. Publiczne CI kompiluje UI i testuje wyłącznie testy niewymagające nieopublikowanego GLB; nie udaje testu modelu ani pełnego APK głosowego.
+
+Działanie PixelCopy/Filament, wygląd, AEC, uprawnienia mikrofonu, import modeli oraz obrót i powrót z tła wymagają testu na telefonie. Backend musi obsługiwać avatar/phone-v1 i hasło; ta zmiana nie wdraża ani nie aktywuje serwera.
+
+---
+
+Poniżej historia wcześniejszych wersji, z dawnymi parametrami i ograniczeniami.
+
 # Wersja 0.5 — sterowanie i podgląd dla Iskry
 
 Aktualny kontrakt, budowanie i test telefonu: [CONTROL_V1.md](CONTROL_V1.md). Model pozostaje z poprawionej wersji 0.4. Poniżej historia wcześniejszych etapów.

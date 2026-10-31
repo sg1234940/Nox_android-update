@@ -10,6 +10,8 @@ data class GlbFaceContract(
     val names: List<String>,
     val animationNames: List<String>,
     val primitiveCount: Int = 1,
+    val materialColors: List<FloatArray> = emptyList(),
+    val materialEmissions: List<FloatArray> = emptyList(),
 ) {
     val indices: Map<String, Int> = names.withIndex().associate { it.value to it.index }
 }
@@ -28,16 +30,20 @@ object GlbFaceContractReader {
     )
 
     fun read(bytes: ByteArray, nodeName: String = "model"): GlbFaceContract {
-        require(bytes.size >= 20) { "GLB truncated" }
+        require(bytes.size in 20..157286400) { "GLB size outside limits" }
         val header = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         require(header.int == 0x46546c67 && header.int == 2) { "Not GLB 2.0" }
         require(header.int == bytes.size) { "GLB length mismatch" }
         val jsonLength = header.int
         require(header.int == 0x4e4f534a) { "Missing JSON chunk" }
-        require(jsonLength > 0 && jsonLength % 4 == 0 && jsonLength <= header.remaining()) { "Invalid JSON length" }
+        require(jsonLength in 1..8388608 && jsonLength % 4 == 0 && jsonLength <= header.remaining()) { "Invalid JSON length" }
         val jsonBytes = ByteArray(jsonLength)
         header.get(jsonBytes)
         val root = JSONObject(String(jsonBytes, Charsets.UTF_8).trimEnd(' ', '\u0000', '\n', '\r', '\t'))
+        require(root.getJSONObject("asset").getString("version") == "2.0")
+        for (key in listOf("buffers", "images")) root.optJSONArray(key)?.let { entries ->
+            for (i in 0 until entries.length()) require(!entries.getJSONObject(i).has("uri")) { "External resources are not allowed" }
+        }
         val nodes = root.getJSONArray("nodes")
         val meshes = root.getJSONArray("meshes")
         val matches = (0 until nodes.length()).filter { nodes.getJSONObject(it).optString("name") == nodeName }
@@ -72,6 +78,17 @@ object GlbFaceContractReader {
         val animations = root.getJSONArray("animations")
         val animationNames = (0 until animations.length()).map { animations.getJSONObject(it).getString("name") }
         require(animationNames.size == animationNames.toSet().size && animationNames.toSet().containsAll(REQUIRED_ANIMATIONS)) { "Body animation contract mismatch" }
-        return GlbFaceContract(nodeName, names, animationNames, primitives.length())
+        val materials=root.optJSONArray("materials")
+        val colors=(0 until primitives.length()).map { i ->
+            val material=materials?.optJSONObject(primitives.getJSONObject(i).optInt("material",-1))
+            val value=material?.optJSONObject("pbrMetallicRoughness")?.optJSONArray("baseColorFactor")
+            FloatArray(4){value?.optDouble(it,1.0)?.toFloat() ?: 1f}
+        }
+        val emissions=(0 until primitives.length()).map { i ->
+            val value=materials?.optJSONObject(primitives.getJSONObject(i).optInt("material",-1))?.optJSONArray("emissiveFactor")
+            FloatArray(3){value?.optDouble(it,0.0)?.toFloat() ?: 0f}
+        }
+        require((colors+emissions).all { a -> a.all { it.isFinite() && it >= 0f } })
+        return GlbFaceContract(nodeName, names, animationNames, primitives.length(),colors,emissions)
     }
 }

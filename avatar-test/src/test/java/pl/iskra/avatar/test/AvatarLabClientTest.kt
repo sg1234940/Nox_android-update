@@ -24,8 +24,13 @@ class AvatarLabClientTest {
     private fun request(receiptValue: String = receipt) = JSONObject().put("type", "done").put("continuation_receipt", receiptValue)
         .put("final_response", JSONObject.NULL).put("avatar_request", JSONObject().put("name", "avatar_control").put("call_id", "move_1")
             .put("arguments", JSONObject("""{"action":"SET","weights":{"mouthSmile":0.3},"preview":false}"""))).toString()
-    private fun final() = JSONObject().put("type", "done").put("final_response", JSONObject().put("finish_reason", "stop")
-        .put("server_continuations_complete", true).put("text", "Gotowe")).toString()
+    private fun final():String {
+        val id="response-fixture"
+        val start=JSONObject().put("type","round_start").put("response_id",id).put("round",1)
+        val f=JSONObject().put("schema","promyk.final/v1").put("response_id",id).put("round",1).put("finish_reason","stop")
+            .put("server_continuations_complete",true).put("text","Gotowe")
+        return start.toString()+"\n"+JSONObject().put("type","done").put("finish_reason","stop").put("finality_protocol","promyk.final/v1").put("final_response",f).toString()
+    }
     @Test fun passwordIsOnlyInHeadersOfEveryPostIncludingContinuation() = fixture(" Zażółć: gęślą ") { server, client ->
         server.enqueue(advertised()); server.enqueue(MockResponse().setBody(request() + "\n")); server.enqueue(MockResponse().setBody(final() + "\n"))
         client.run(server.url("/").toString(), "c", 1, "uśmiech", { true }, {}, { JSONObject().put("ok", true) })

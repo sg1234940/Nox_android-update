@@ -12,10 +12,17 @@ android {
         targetSdk = 36
         versionCode = 6
         versionName = "0.6-test"
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        ndk { abiFilters += if(project.findProject(":avatar-voice")!=null) listOf("arm64-v8a") else listOf("arm64-v8a", "x86_64") }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
+    buildFeatures { buildConfig = true }
     androidResources { noCompress += "glb" }
 }
-dependencies { implementation(project(":avatar")); implementation("com.squareup.okhttp3:okhttp:4.12.0"); testImplementation("junit:junit:4.13.2"); testImplementation("org.json:json:20250517"); testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0"); testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0") }
+dependencies {
+ implementation(project(":avatar"))
+ if(findProject(":avatar-voice")!=null) implementation(project(":avatar-voice"))
+ implementation("com.squareup.okhttp3:okhttp:4.12.0")
+ testImplementation("junit:junit:4.13.2");testImplementation("org.json:json:20250517")
+ testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0");testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
+}

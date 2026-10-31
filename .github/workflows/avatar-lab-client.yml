@@ -30,12 +30,16 @@ jobs:
           test -x "$manager"
           yes | "$manager" --licenses > /dev/null || true
           "$manager" --install 'platforms;android-36' 'build-tools;36.0.0'
-      - name: Compile both Android modules and test real HTTPS client
-        run: gradle -p avatar-lab :avatar-test:testDebugUnitTest --tests '*AvatarLabClientTest'
+      - name: Compile both Android modules and test HTTPS, finality and presentation
+        run: |
+          gradle -p avatar-lab :avatar:testDebugUnitTest --tests '*AvatarControllerTest' --tests '*BodyPlaybackTest' --tests '*LabPresentationTest' --tests '*BackgroundGlbTest'
+          gradle -p avatar-lab :avatar-test:testDebugUnitTest
       - name: Preserve test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: avatar-lab-client-tests
-          path: avatar-test/build/test-results/testDebugUnitTest/
+          path: |
+            avatar/build/test-results/testDebugUnitTest/
+            avatar-test/build/test-results/testDebugUnitTest/
           if-no-files-found: warn

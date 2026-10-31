@@ -61,4 +61,10 @@ class GlbFaceContractTest {
         })
 
     }
+    @Test(expected = IllegalArgumentException::class) fun externalBufferCannotReadPrivateFiles() {
+        GlbFaceContractReader.read(alteredJson { it.getJSONArray("buffers").getJSONObject(0).put("uri", "file:///private/model.bin") })
+    }
+    @Test(expected = IllegalArgumentException::class) fun externalImageCannotReachTheNetwork() {
+        GlbFaceContractReader.read(alteredJson { it.getJSONArray("images").getJSONObject(0).put("uri", "https://remote.invalid/face.png") })
+    }
 }

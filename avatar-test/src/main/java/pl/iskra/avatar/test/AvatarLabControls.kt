@@ -21,94 +21,40 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
-/** Foreground-only lab adapter. Manual controls always take over from a model attempt. */
+/** Foreground-only transport/controller adapter. Activity owns presentation and local voice. */
 class AvatarLabControls(private val activity: Activity, private val avatar: AvatarSurfaceView,
     private val begin: () -> Unit, private val send: (AvatarController.Command) -> Unit,
     private val camera: () -> Pair<Float, Boolean>, private val setCamera: (Float, Boolean) -> Unit,
     private val refresh: () -> Unit) {
-    private val handler = Handler(Looper.getMainLooper())
-    private val worker = Executors.newSingleThreadExecutor()
-    private val generation = AtomicLong()
-    private val conversation = UUID.randomUUID().toString()
-    private var revision = 0L
-    @Volatile private var inForeground = false
-    @Volatile private var busy = false
-    @Volatile private var client: AvatarLabClient? = null
-    private var applying = false
-    private lateinit var output: TextView
-    private lateinit var sendButton: Button
-    private var previewDialog: AlertDialog? = null
-    private data class Execution(val result: JSONObject, val preview: AvatarSurfaceView.Preview? = null)
-
-    fun install(parent: LinearLayout) {
-        val prefs = activity.getSharedPreferences("avatar_lab_connection", 0)
-        val address = EditText(activity).apply { setSingleLine(true); hint = "Adres bramki HTTPS"; setText(prefs.getString("url", "")); contentDescription = "Adres bramki Iskry" }
-        parent.addView(address)
-        val passwords = GatewayPasswordStore(activity)
-        val password = EditText(activity).apply {
-            setSingleLine(true); hint = "Hasło dostępu do Iskry"; contentDescription = "Hasło dostępu do Iskry"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
-            setText(passwords.read(address.text.toString()))
+    private val handler=Handler(Looper.getMainLooper())
+    private val worker=Executors.newSingleThreadExecutor()
+    private val generation=AtomicLong()
+    private val conversation=UUID.randomUUID().toString()
+    private var revision=0L
+    @Volatile private var inForeground=false
+    @Volatile var busy=false;private set
+    @Volatile private var client:AvatarLabClient?=null
+    private var applying=false
+    private data class Execution(val result:JSONObject,val preview:AvatarSurfaceView.Preview?=null)
+    fun submit(base:String,password:String,text:String,voiceContext:JSONObject?,
+        onText:(String)->Unit,onComplete:(String,JSONObject?)->Unit,onError:(String)->Unit) {
+        check(inForeground && !busy)
+        cancel();val owner=generation.incrementAndGet();begin();busy=true
+        val attempt=AvatarLabClient(password=password);client=attempt
+        val current={generation.get()==owner && inForeground}
+        val calls=Protocol.Calls();val rev=++revision
+        worker.execute {
+            try {val answer=attempt.run(base,conversation,rev,text,current,
+                onText={delta->handler.post {if(current())onText(delta)}},execute={request->execute(request,calls,current)},voiceContext=voiceContext)
+                val proof=attempt.finalResponse?.let {JSONObject(it.toString())}
+                handler.post {if(current()){busy=false;client=null;onComplete(answer,proof)}}
+            }catch(_:Exception){handler.post {if(current()){busy=false;client=null;onError("Nie zakończono połączenia. Sprawdź adres, hasło i dostępność bramki. Nie ponawiam operacji automatycznie.")}}}
         }
-        parent.addView(password)
-        val input = EditText(activity).apply { hint = "Napisz Iskrze, jaki ruch chcesz sprawdzić"; minLines = 1; maxLines = 3 }
-        parent.addView(input)
-        sendButton = Button(activity).apply { text = "Wyślij do Iskry"; isAllCaps = false }
-        output = TextView(activity).apply { text = "W tej próbie Iskra może sterować awatarem i oglądać jego podgląd. Możesz też sprawdzić obraz lokalnie."; setTextColor(0xffe3ebf8.toInt()); setTextIsSelectable(true) }
-        sendButton.setOnClickListener {
-            if (!inForeground) return@setOnClickListener
-            if (busy) return@setOnClickListener
-            val text = input.text.toString().trim()
-            if (text.isBlank() || text.length > 8000) { output.text = "Wpisz wiadomość do 8000 znaków."; return@setOnClickListener }
-            val base = address.text.toString().trim()
-            val accessPassword = password.text.toString()
-            try { passwords.write(base, accessPassword) } catch (_: Exception) { output.text = "Nie zapisano hasła. Sprawdź adres HTTPS i format hasła (do 256 znaków)."; return@setOnClickListener }
-            prefs.edit().putString("url", base).apply()
-            cancel(); val owner = generation.incrementAndGet(); begin(); busy = true; sendButton.isEnabled = false
-            val attempt = AvatarLabClient(password = accessPassword); client = attempt; val current = { generation.get() == owner && inForeground }
-            val calls = Protocol.Calls(); val rev = ++revision; output.text = "Łączę z Iskrą…"
-            worker.execute {
-                val streamed = StringBuilder()
-                try {
-                    val answer = attempt.run(base, conversation, rev, text, current, onText = { delta ->
-                        streamed.append(delta); handler.post { if (current()) output.text = streamed.toString() }
-                    }, execute = { request -> execute(request, calls, current) })
-                    handler.post { if (current()) output.text = answer.ifBlank { "Odpowiedź zakończona." } }
-                } catch (e: Exception) { handler.post { if (current()) output.text = "${e.message ?: "Przerwano próbę."}\nPo błędzie nie ponawiam ruchu automatycznie." } }
-                finally { handler.post { if (generation.get() == owner) { busy = false; sendButton.isEnabled = true; client = null; refresh() } } }
-            }
-        }
-        parent.addView(sendButton)
-        parent.addView(Button(activity).apply { text = "Przerwij sterowanie Iskry"; isAllCaps = false; setOnClickListener { cancel(); output.text = "Przerwano. Suwaki są do Twojej dyspozycji." } })
-        parent.addView(Button(activity).apply {
-            text = "Sprawdź podgląd lokalnie"; isAllCaps = false
-            setOnClickListener {
-                cancel(); val owner = generation.get()
-                avatar.capturePreview { preview, error ->
-                    if (generation.get() != owner || !inForeground || activity.isFinishing || activity.isDestroyed) { preview?.bitmap?.recycle(); return@capturePreview }
-                    if (preview == null) output.text = "Podgląd niegotowy: ${error ?: "COPY_FAILED"}."
-                    else {
-                        val image = ImageView(activity).apply { setImageBitmap(preview.bitmap); adjustViewBounds = true; contentDescription = "Podgląd awatara dla Iskry" }
-                        val dialog = AlertDialog.Builder(activity).setTitle("Taki obraz może dostać Iskra").setView(image).setPositiveButton("Zamknij",null).create()
-                        previewDialog = dialog
-                        dialog.setOnDismissListener { image.setImageDrawable(null); preview.bitmap.recycle(); if (previewDialog === dialog) previewDialog = null }
-                        dialog.show()
-                    }
-                }
-            }
-        })
-        parent.addView(output)
     }
-    fun resumed(value: Boolean) { inForeground = value; if (!value) cancel() }
-    fun manual() { if (!applying && busy) cancel() }
-    private fun cancel() {
-        generation.incrementAndGet(); client?.cancel(); client = null; busy = false
-        previewDialog?.dismiss(); previewDialog = null
-        if (::sendButton.isInitialized) sendButton.isEnabled = true
-        avatar.invalidatePreview()
-    }
-    fun destroy() { cancel(); worker.shutdownNow() }
+    fun resumed(value:Boolean){inForeground=value;if(!value)cancel()}
+    fun manual(){if(!applying && busy)cancel()}
+    fun cancel(){generation.incrementAndGet();client?.cancel();client=null;busy=false;avatar.invalidatePreview()}
+    fun destroy(){cancel();worker.shutdownNow()}
     private fun frame(f: AvatarSurfaceView.Frame) = JSONObject().put("id", f.id).put("at", f.at).put("pose", Protocol.pose(f.state, f.angle, f.face))
     private fun execute(request: JSONObject, calls: Protocol.Calls, current: () -> Boolean): JSONObject {
         val id = request.optString("call_id"); val args = request.optJSONObject("arguments")

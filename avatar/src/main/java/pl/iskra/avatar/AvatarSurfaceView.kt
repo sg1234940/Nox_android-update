@@ -2,6 +2,8 @@ package pl.iskra.avatar
 
 import android.content.Context
 import android.graphics.Bitmap
+import java.io.File
+import java.io.ByteArrayOutputStream
 import android.os.Handler
 import android.os.Looper
 import android.view.Choreographer
@@ -32,7 +34,45 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
     private var scheduled = false
     private var previousFrame = 0L
     private var azimuth = 0f
-    private var closeup = true
+    private var closeup = false
+    private var zoom = 1f
+    private var hologram = false
+    private var brightness = 1f
+    private var modelRequest = 0L
+    private var backgroundRequest = 0L
+    private var selectedFile: File? = null
+    private var lastWeights = FloatArray(21)
+    private var nextDelay = 0L
+    fun setZoom(value: Float) { checkMain(); require(value.isFinite() && value in .65f..1.8f); zoom=value; invalidatePreview() }
+    fun setAppearance(value: Boolean, light: Float) { checkMain(); require(light.isFinite() && light in .2f..2f); hologram=value;brightness=light;invalidatePreview() }
+    fun loadModel(file: File?, callback: (Boolean) -> Unit) {
+        checkMain(); val request=++modelRequest; cancelCapture()
+        val owner=session ?: run { callback(false);return }
+        worker?.execute {
+            try {
+                val bytes=if(file==null) context.assets.open(ASSET_PATH).use { it.readBytes() } else file.inputStream().use { it.readBytes() }
+                require(bytes.size in 20..157286400)
+                if(file==null) require(MessageDigest.getInstance("SHA-256").digest(bytes).joinToString(""){"%02x".format(it)}==MODEL_SHA256)
+                val parsed=GlbFaceContractReader.read(bytes)
+                handler.post { if(request==modelRequest && session===owner && isAttachedToWindow) {
+                    try { owner.load(bytes,parsed);selectedFile=file;cancelCapture();schedule();callback(true) }
+                    catch(_:Exception){onStatus("Nie udało się zmienić modelu. Zachowano poprzedni.");callback(false)}
+                } }
+            } catch(_:Exception) {handler.post { if(request==modelRequest){onStatus("Nieprawidłowy lub niedostępny model.");callback(false)} }}
+        } ?: callback(false)
+    }
+    fun setSceneBackground(bitmap: Bitmap?, callback: (Boolean) -> Unit = {}) {
+        checkMain();val request=++backgroundRequest
+        val owner=session ?: run{bitmap?.recycle();callback(false);return}
+        worker?.execute {
+            var failed=false
+            val bytes=try {bitmap?.let {b -> ByteArrayOutputStream().use {o -> check(b.compress(Bitmap.CompressFormat.PNG,100,o));BackgroundGlb.create(o.toByteArray())}}}
+                catch(_:Exception){failed=true;null} catch(_:OutOfMemoryError){failed=true;null} finally{bitmap?.recycle()}
+            handler.post {if(session===owner && isAttachedToWindow && request==backgroundRequest){
+                if(failed)callback(false)else try{owner.background(bytes);invalidatePreview();callback(true)}catch(_:Exception){callback(false)}
+            }}
+        } ?: run{bitmap?.recycle();callback(false)}
+    }
     data class Frame(val id: Long, val at: String, val state: AvatarController.Snapshot, val angle: Float, val face: Boolean)
     data class Preview(val bitmap: Bitmap, val frame: Frame)
     private class Capture(val callback: (Preview?, String?) -> Unit) { var done = false }
@@ -42,7 +82,7 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
     private var frameId = 0L
     private var presented: Frame? = null
     fun lastFrame(): Frame? = presented
-    fun invalidatePreview() { checkMain(); cancelCapture(); schedule() }
+    fun invalidatePreview() { checkMain(); cancelCapture(); unschedule();nextDelay=0;schedule() }
     /** Copies this SurfaceView only. Never reads the window, gallery or camera. */
     fun capturePreview(callback: (Preview?, String?) -> Unit) {
         checkMain()
@@ -92,18 +132,21 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
                 val dt = if (previousFrame == 0L) 0f else ((time - previousFrame) / 1e9f).coerceAtLeast(0f)
                 previousFrame = time
                 val state = controller.frame(dt)
-                if (session?.render(time, state, azimuth, closeup) == true) {
+                if (session?.render(time, state, azimuth, closeup, zoom, hologram, brightness) == true) {
                     val frame = Frame(++frameId, java.time.Instant.now().toString(), state.copy(weights = state.weights.copyOf()), azimuth, closeup)
                     presented = frame
                     if (capture != null) copyFrame(frame)
                 }
+                val settling=state.weights.indices.any { kotlin.math.abs(state.weights[it]-lastWeights[it])>.001f }
+                lastWeights=state.weights.copyOf()
+                nextDelay=LabPresentation().frameDelay(state.phase!=AvatarController.Phase.IDLE || state.animation!=null && !state.bodyPaused,settling,capture!=null)
                 schedule()
             } catch (e: Exception) { fail(e) } catch (e: LinkageError) { fail(e) }
         }
     }
     fun setCamera(azimuthRadians: Float, face: Boolean) {
         checkMain(); require(azimuthRadians.isFinite() && azimuthRadians in -1.2f..1.2f)
-        azimuth = azimuthRadians; closeup = face
+        azimuth = azimuthRadians; closeup = face; invalidatePreview()
     }
     fun setResumed(value: Boolean) {
         checkMain(); resumed = value; previousFrame = 0
@@ -121,9 +164,9 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
             worker = Executors.newSingleThreadExecutor()
             worker!!.execute {
                 try {
-                    val bytes = context.assets.open(ASSET_PATH).use { it.readBytes() }
+                    val bytes = selectedFile?.readBytes() ?: context.assets.open(ASSET_PATH).use { it.readBytes() }
                     val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-                    require(hash == MODEL_SHA256) { "Nieprawidłowy SHA modelu" }
+                    require(selectedFile != null || hash == MODEL_SHA256) { "Nieprawidłowy SHA modelu" }
                     val contract = GlbFaceContractReader.read(bytes)
                     handler.post {
                         if (generation == attachment && isAttachedToWindow && session === created) {
@@ -139,7 +182,7 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
         } catch (e: Exception) { fail(e) } catch (e: LinkageError) { fail(e) }
     }
     override fun onDetachedFromWindow() {
-        ++attachment; cancelCapture(); unschedule(); worker?.shutdownNow(); worker = null
+        ++attachment; ++modelRequest; ++backgroundRequest; cancelCapture(); unschedule(); worker?.shutdownNow(); worker = null
         controller.suspendPlayback(); previousFrame = 0
         releaseSession()
         super.onDetachedFromWindow()
@@ -155,7 +198,7 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
     }
     private fun schedule() {
         if (resumed && isAttachedToWindow && session != null && !scheduled && !copyBusy) {
-            scheduled = true; Choreographer.getInstance().postFrameCallback(frame)
+            scheduled = true; Choreographer.getInstance().postFrameCallbackDelayed(frame,nextDelay)
         }
     }
     private fun unschedule() { Choreographer.getInstance().removeFrameCallback(frame); scheduled = false }
@@ -191,6 +234,19 @@ private class RenderSession(context: Context) : AutoCloseable {
     private val bindTransforms = linkedMapOf<Int, FloatArray>()
     private var lastFrame = 0L
     private var closed = false
+    private var parsedContract: GlbFaceContract? = null
+    private var lastAppearance: Pair<Boolean,Float>? = null
+    private var backgroundAsset: FilamentAsset? = null
+    fun background(bytes: ByteArray?) {
+        val next=bytes?.let {
+            val b=ByteBuffer.allocateDirect(it.size).order(ByteOrder.nativeOrder()).put(it);b.flip()
+            val candidate=checkNotNull(loader!!.createAsset(b))
+            try {val resources=ResourceLoader(engine);try{resources.loadResources(candidate)}finally{resources.destroy()};candidate.releaseSourceData();candidate}
+            catch(e:Exception){loader!!.destroyAsset(candidate);throw e}
+        }
+        backgroundAsset?.let {scene.removeEntities(it.entities);loader!!.destroyAsset(it)}
+        backgroundAsset=next;next?.let {scene.addEntities(it.entities)}
+    }
 
     fun initialize(surface: SurfaceView) {
         renderer = engine.createRenderer()
@@ -198,7 +254,7 @@ private class RenderSession(context: Context) : AutoCloseable {
         cameraEntity = EntityManager.get().create(); camera = engine.createCamera(cameraEntity)
         camera.setExposure(16f, 1f / 125f, 100f)
         view.scene = scene; view.camera = camera
-        sky = Skybox.Builder().color(.055f, .075f, .11f, 1f).build(engine)
+        sky = Skybox.Builder().color(0f, 0f, 0f, 1f).build(engine)
         scene.skybox = sky
         val irradiance = FloatArray(27); irradiance[0] = .8f; irradiance[1] = .8f; irradiance[2] = .8f
         indirect = IndirectLight.Builder().irradiance(3, irradiance).intensity(25_000f).build(engine)
@@ -229,32 +285,32 @@ private class RenderSession(context: Context) : AutoCloseable {
         display.attach(renderer, surface.display)
     }
     fun load(bytes: ByteArray, parsed: GlbFaceContract) {
-        check(!closed && asset == null)
-        val buffer = ByteBuffer.allocateDirect(bytes.size).order(ByteOrder.nativeOrder()).put(bytes)
-        buffer.flip()
-        val created = checkNotNull(loader!!.createAsset(buffer)) { "Nie można załadować GLB" }
-        asset = created // cleanup owner established before resource upload / validation
-        val resources = ResourceLoader(engine)
-        try { resources.loadResources(created) } finally { resources.destroy() }
-        val entity = created.getEntitiesByName(parsed.nodeName).single()
-        morphInstance = engine.renderableManager.getInstance(entity)
-        check(morphInstance != 0)
-        check(engine.renderableManager.getPrimitiveCount(morphInstance) == parsed.primitiveCount)
-        check(created.getMorphTargetNames(entity).toList() == parsed.names)
-        check(engine.renderableManager.getMorphTargetCount(morphInstance) == parsed.names.size)
-        val a = created.instance.animator
-        check(List(a.animationCount) { a.getAnimationName(it) } == parsed.animationNames)
-        val transforms = engine.transformManager
-        for (id in (created.entities + intArrayOf(created.root)).distinct()) {
-            val instance = transforms.getInstance(id)
-            if (instance != 0) bindTransforms[instance] = transforms.getTransform(instance, FloatArray(16))
-        }
-        animator = a; selectedAnimation = null; a.updateBoneMatrices()
-        engine.renderableManager.setMorphWeights(morphInstance, FloatArray(parsed.names.size), 0)
-        created.releaseSourceData()
-        scene.addEntities(created.entities)
+        check(!closed)
+        val buffer=ByteBuffer.allocateDirect(bytes.size).order(ByteOrder.nativeOrder()).put(bytes);buffer.flip()
+        val created=checkNotNull(loader!!.createAsset(buffer)){"Nie można załadować GLB"}
+        try {
+            val resources=ResourceLoader(engine);try{resources.loadResources(created)}finally{resources.destroy()}
+            val entity=created.getEntitiesByName(parsed.nodeName).single()
+            val instance=engine.renderableManager.getInstance(entity)
+            check(instance!=0 && engine.renderableManager.getPrimitiveCount(instance)==parsed.primitiveCount)
+            check(created.getMorphTargetNames(entity).toList()==parsed.names)
+            check(engine.renderableManager.getMorphTargetCount(instance)==parsed.names.size)
+            val a=created.instance.animator
+            check(List(a.animationCount){a.getAnimationName(it)}==parsed.animationNames)
+            val transforms=engine.transformManager
+            val nextBinds=linkedMapOf<Int,FloatArray>()
+            for(id in (created.entities+intArrayOf(created.root)).distinct()){
+                val i=transforms.getInstance(id);if(i!=0)nextBinds[i]=transforms.getTransform(i,FloatArray(16))
+            }
+            a.updateBoneMatrices();engine.renderableManager.setMorphWeights(instance,FloatArray(parsed.names.size),0)
+            created.releaseSourceData();scene.addEntities(created.entities)
+            val previous=asset
+            asset=created;animator=a;morphInstance=instance;parsedContract=parsed;lastAppearance=null
+            bindTransforms.clear();bindTransforms.putAll(nextBinds);selectedAnimation=null;animationIndex=null;bodyPlayback.frame(null,0f,false)
+            previous?.let{scene.removeEntities(it.entities);loader!!.destroyAsset(it)}
+        } catch(e:Exception){if(asset!==created)loader!!.destroyAsset(created);throw e}
     }
-    fun render(now: Long, state: AvatarController.Snapshot, angle: Float, closeup: Boolean): Boolean {
+    fun render(now: Long, state: AvatarController.Snapshot, angle: Float, closeup: Boolean, zoom: Float, hologram: Boolean, brightness: Float): Boolean {
         if (closed || !ui.isReadyToRender || asset == null) return false
         val dt = if (lastFrame == 0L) 0f else ((now - lastFrame) / 1e9f).coerceIn(0f, .1f)
         lastFrame = now
@@ -270,9 +326,27 @@ private class RenderSession(context: Context) : AutoCloseable {
             a.applyAnimation(i, if (duration > 0f) body.seconds % duration else 0f); a.updateBoneMatrices()
         } }
         if (morphInstance != 0) engine.renderableManager.setMorphWeights(morphInstance, state.weights, 0)
-        val distance = if (closeup) .74 else 3.4
+        val distance = (if (closeup) .74 else 3.4) / zoom
         val targetY = if (closeup) 1.70 else .95
         camera.lookAt(distance * sin(angle), targetY + (if (closeup) .02 else .04), distance * cos(angle), 0.0, targetY, 0.0, 0.0, 1.0, 0.0)
+        if(lastAppearance != (hologram to brightness)) {
+            val rm=engine.renderableManager
+            for(i in 0 until (parsedContract?.primitiveCount ?: 0)) {
+                val m=rm.getMaterialInstanceAt(morphInstance,i)
+                val c=parsedContract!!.materialColors.getOrNull(i) ?: floatArrayOf(1f,1f,1f,1f)
+                val e=parsedContract!!.materialEmissions.getOrNull(i) ?: floatArrayOf(0f,0f,0f)
+                if(m.material.hasParameter("baseColorFactor")) m.setParameter("baseColorFactor",Colors.RgbaType.LINEAR,
+                    if(hologram && i==0).12f else c[0],if(hologram && i==0).7f else c[1],if(hologram && i==0)1f else c[2],c[3])
+                if(m.material.hasParameter("emissiveFactor")) m.setParameter("emissiveFactor",Colors.RgbType.LINEAR,
+                    if(hologram && i==0).05f*brightness else e[0],if(hologram && i==0).35f*brightness else e[1],if(hologram && i==0).8f*brightness else e[2])
+            }
+            lastAppearance=hologram to brightness
+        }
+        backgroundAsset?.let {bg ->
+            val tm=engine.transformManager;val i=tm.getInstance(bg.root)
+            if(i!=0) {val c=cos(angle);val s=sin(angle);val aspect=view.viewport.width.toFloat()/view.viewport.height.coerceAtLeast(1)
+                tm.setTransform(i,floatArrayOf(c*aspect,0f,-s*aspect,0f,0f,1f,0f,0f,s,0f,c,0f,-5*s,targetY.toFloat(),-5*c,1f))}
+        }
         swapChain?.let { if (renderer.beginFrame(it, now)) { renderer.render(view); renderer.endFrame(); return true } }
         return false
     }
@@ -287,6 +361,7 @@ private class RenderSession(context: Context) : AutoCloseable {
             }
         }
         attempt { ui.detach() }
+        backgroundAsset?.let { b -> attempt {scene.removeEntities(b.entities)};attempt {loader?.destroyAsset(b)} };backgroundAsset=null
         asset?.let { a ->
             attempt { if (::scene.isInitialized) scene.removeEntities(a.entities) }
             attempt { loader?.destroyAsset(a) }
