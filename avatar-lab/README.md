@@ -1,3 +1,13 @@
+# Aktualizacja 0.6.2 — zweryfikowany kod w APK
+
+Zgłoszenie z telefonu potwierdziło pasek mimo wersji 0.6.1. Weryfikacja DEX starego APK ujawniła, że manifest miał wersję 0.6.1, ale ekran nadal zawierał wcześniejsze sayStatus bez setVisibility i callback bezpośrednio ustawiający tekst. Wcześniejsze zapewnienie o poprawce w artefakcie było błędne; testy JVM i numer wersji nie wystarczyły.
+
+W 0.6.2 wykonano clean obu modułów, kompilację bez cache i ponowne wykonanie wszystkich zadań. Nagłówek pokazuje wersję 0.6.2. Gotowy APK sprawdzono przez oficjalny dexdump: kod sayStatus przełącza widoczność, obsługa gotowego modelu nie wpisuje technicznego tekstu bezpośrednio, widoczny numer jest aktualny. Ten sam check_status_apk.py odrzuca stare 0.6.1 i przyjmuje nowe 0.6.2. Kontrola działa też w publicznym CI na compile-only APK bez GLB; ten pomocniczy APK nie jest publikowany jako pełny Lab.
+
+Build pełnego hosta, 13/13 testów klienta/finality, podpis zgodny z 0.5/0.6 oraz zipalign 16 KiB PASS. APK 0.6.2-test / kod 8: 146070114 bajtów, SHA-256 `251af087510ec3c114b2b20d26ce2e1816c26b960e21ab5d5544b93cf1dfd24a`. Model GLB pozostaje niezmieniony. Wygląd po aktualizacji wymaga potwierdzenia na telefonie. Bez merge/deployu i zmian flag.
+
+---
+
 # Iskra Lab 0.6 — rozmowa, wygląd i podgląd
 
 Samodzielna aplikacja `pl.iskra.avatar.test.v4`, wersja `0.6-test` (6), Android 8+ / ARM64 w pełnym wariancie. Nie zastępuje osobowości ani pamięci Iskry: korzysta z tej samej bramki backendu. Adres HTTPS i hasło wpisuje właściciel w ustawieniach; brak zaszytego adresu produkcji.
