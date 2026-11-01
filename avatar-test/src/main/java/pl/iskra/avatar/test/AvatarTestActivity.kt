@@ -165,7 +165,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   return GradientDrawable().apply {setColor(Color.argb((255*opacity).roundToInt(),15,28,43));cornerRadius=dp(18).toFloat();setStroke(dp(1),Color.argb((160*opacity).roundToInt(),53,84,110))}
  }
  private fun layoutChat(){
-  if(!::transcript.isInitialized||root.height==0)return
+  if(root.height==0)return
   val margins=(footer.layoutParams as? LinearLayout.LayoutParams)?.let{it.topMargin+it.bottomMargin}?:0
   val available=(root.height-root.paddingTop-root.paddingBottom-header.height-footer.height-margins).coerceAtLeast(0)
   val height=(available*profile.chatHeight/100f).roundToInt()
