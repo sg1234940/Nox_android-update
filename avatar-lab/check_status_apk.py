@@ -24,7 +24,7 @@ def check(apk, dexdump, version):
                     continue
                 path = Path(temp) / name
                 path.write_bytes(data)
-                dump = subprocess.check_output([str(dexdump), '-d', str(path)], text=True)
+                dump = subprocess.check_output([str(dexdump), '-d', str(path)], text=True, errors='replace')
                 for block in re.split(r'\nClass #\d+', dump):
                     if re.search(r"Class descriptor\s+: '" + re.escape(descriptor) + "'", block):
                         found.append(block)
