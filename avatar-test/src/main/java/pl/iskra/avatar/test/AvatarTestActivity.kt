@@ -30,6 +30,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
  private lateinit var avatar:AvatarSurfaceView;private lateinit var lab:AvatarLabControls
  private lateinit var root:FrameLayout;private lateinit var drawer:LinearLayout;private lateinit var shade:View
  private lateinit var input:EditText;private lateinit var action:ImageButton;private lateinit var notice:TextView
+ private lateinit var header:LinearLayout
  private lateinit var bubbles:LinearLayout;private lateinit var transcript:ScrollView;private lateinit var footer:LinearLayout
  private var controlsPanel:LinearLayout?=null
  private lateinit var preferences:LabPreferences
@@ -58,10 +59,10 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   root.addView(avatar,FrameLayout.LayoutParams(-1,-1))
   val overlay=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
   root.addView(overlay,FrameLayout.LayoutParams(-1,-1))
-  val header=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL}
+  header=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL}
   header.addView(button("☰"){openDrawer()},LinearLayout.LayoutParams(dp(60),dp(52)))
-  header.addView(label("Iskra Lab 0.6.3",18f),LinearLayout.LayoutParams(0,dp(56),1f))
-  header.addView(button("⚙"){connectionSettings()},LinearLayout.LayoutParams(dp(60),dp(52)))
+  header.addView(label("Iskra Lab 0.6.4",18f),LinearLayout.LayoutParams(0,dp(56),1f))
+  header.addView(button("⚙"){settings()},LinearLayout.LayoutParams(dp(60),dp(52)))
   overlay.addView(header);overlay.addView(View(this),LinearLayout.LayoutParams(-1,0,1f))
   notice=label("",12f).apply {visibility=View.GONE;setPadding(dp(12),dp(4),dp(12),0);accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE}
   bubbles=column();transcript=ScrollView(this).apply {addView(bubbles);visibility=View.GONE}
@@ -70,7 +71,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   input=EditText(this).apply {hint="Napisz do Iskry…";setHintTextColor(0xff94aec8.toInt());setTextColor(Color.WHITE);background=null;maxLines=4;minLines=1;setSingleLine(false)}
   action=ImageButton(this).apply {background=GradientDrawable().apply{shape=GradientDrawable.OVAL;setColor(0xff00bde9.toInt())};imageTintList=android.content.res.ColorStateList.valueOf(0xff082137.toInt())}
   composer.addView(input,LinearLayout.LayoutParams(0,-2,1f));composer.addView(action,LinearLayout.LayoutParams(dp(52),dp(52)))
-  footer=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL;background=panel(145);addView(notice);addView(composer)}
+  footer=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL;background=chatPanel();addView(notice);addView(composer)}
   overlay.addView(footer,LinearLayout.LayoutParams(-1,-2).apply {setMargins(dp(10),dp(8),dp(10),dp(8))})
   shade=View(this).apply {setBackgroundColor(0x77000000);visibility=View.GONE;setOnClickListener{closeDrawer()}};root.addView(shade,FrameLayout.LayoutParams(-1,-1))
   drawer=column().apply {setBackgroundColor(0xf5152333.toInt());visibility=View.GONE};root.addView(ScrollView(this).apply{addView(drawer);tag="drawer";visibility=View.GONE},FrameLayout.LayoutParams(dp(292),-1,Gravity.START))
@@ -83,8 +84,8 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   avatar.onStatus={message->if(message.startsWith("Model gotowy")){sayStatus("");if(!initializedAppearance){initializedAppearance=true;applyProfileModel();applyBackground()}}else sayStatus(message)}
   installGestures();applyCamera();avatar.setAppearance(profile.hologram,profile.brightness);refreshAction();buildDrawer()
   root.setOnApplyWindowInsetsListener {v,insets->v.setPadding(0,insets.systemWindowInsetTop,0,insets.systemWindowInsetBottom);insets}
-  root.addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->layoutControls()}
-  setContentView(root);root.requestApplyInsets()
+  root.addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->layoutControls();layoutChat()}
+  setContentView(root);root.requestApplyInsets();root.post {applyChatAppearance()}
  }
  private fun refreshAction(){val mode=profile.action(input.text.isNotBlank(),listening);action.setImageResource(when(mode){"SEND"->android.R.drawable.ic_menu_send;"STOP"->android.R.drawable.ic_media_pause;else->android.R.drawable.ic_btn_speak_now});action.contentDescription=when(mode){"SEND"->"Wyślij";"STOP"->"Przerwij nagrywanie";else->"Mikrofon"}}
  private fun sayStatus(text:String){notice.text=text;notice.visibility=if(text.isBlank()||text=="Gotowe")View.GONE else View.VISIBLE}
@@ -109,7 +110,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   return JSONObject().put("schema","promyk.context/v4").put("voice_identity","ISKRA").put("default_package_id",selected.id).put("packages",packages)
    .put("active_language",profile.outputLanguage).put("conversation_mode","VOICE_CONVERSATION").put("synthesis_enabled",true).put("language_defaults",defaults).put("preferred_length_scale",profile.lengthScale.toDouble())
  }
- private fun bubble(text:String,user:Boolean){val view=label(text,16f).apply{background=panel(if(user)170 else 150)};bubbles.addView(view,LinearLayout.LayoutParams(-1,-2).apply{setMargins(if(user)dp(36) else 0,dp(5),if(user)0 else dp(36),dp(5))});while(bubbles.childCount>100)bubbles.removeViewAt(0);transcript.post{transcript.fullScroll(View.FOCUS_DOWN)}}
+ private fun bubble(text:String,user:Boolean){val view=label(text,16f).apply{background=chatPanel()};bubbles.addView(view,LinearLayout.LayoutParams(-1,-2).apply{setMargins(if(user)dp(36) else 0,dp(5),if(user)0 else dp(36),dp(5))});while(bubbles.childCount>100)bubbles.removeViewAt(0);transcript.post{transcript.fullScroll(View.FOCUS_DOWN)}}
  private fun sendTyped(){val text=input.text.toString().trim();if(text.isEmpty())return;interrupt();textMode=true;transcript.visibility=View.VISIBLE;input.setText("");submit(text)}
  private fun submit(text:String){
   if(!foreground || text.length>8000){sayStatus("Wypowiedź musi mieć najwyżej 8000 znaków.");return}
@@ -153,11 +154,47 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   drawer.addView(label("Wygląd"));drawer.addView(button("Awatar"){closeDrawer();chooseModel(false)});drawer.addView(button("Ubiór"){closeDrawer();chooseModel(true)})
   drawer.addView(button(if(profile.hologram)"Styl: holograficzny" else "Styl: zwykły"){closeDrawer();interrupt();profile=profile.copy(hologram=!profile.hologram);avatar.setAppearance(profile.hologram,profile.brightness);save();buildDrawer()})
   drawer.addView(button("Jasność hologramu"){closeDrawer();sliderDialog("Jasność hologramu",profile.brightness,.2f,2f){profile=profile.copy(brightness=it);avatar.setAppearance(profile.hologram,it);save()}})
-  drawer.addView(button("Tło"){closeDrawer();backgroundSettings()});drawer.addView(button("Głos i język"){closeDrawer();voiceSettings()});drawer.addView(button("Połączenie"){closeDrawer();connectionSettings()})
+  drawer.addView(button("Wygląd czatu"){closeDrawer();chatSettings()});drawer.addView(button("Tło"){closeDrawer();backgroundSettings()});drawer.addView(button("Głos i język"){closeDrawer();voiceSettings()});drawer.addView(button("Połączenie"){closeDrawer();connectionSettings()})
  }
  private fun openDrawer(){closeControls();interrupt();(getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(input.windowToken,0);drawerOpen=true;shade.visibility=View.VISIBLE;val v=root.findViewWithTag<View>("drawer");v.visibility=View.VISIBLE;drawer.visibility=View.VISIBLE;v.translationX=-dp(292).toFloat();v.animate().translationX(0f).setDuration(160).start()}
  private fun closeDrawer(){drawerOpen=false;shade.visibility=View.GONE;root.findViewWithTag<View>("drawer").visibility=View.GONE}
  override fun onBackPressed(){if(controlsPanel!=null)closeControls()else if(drawerOpen)closeDrawer()else super.onBackPressed()}
+ private fun chatPanel():GradientDrawable {
+  val opacity=1f-profile.chatTransparency/100f
+  return GradientDrawable().apply {setColor(Color.argb((255*opacity).roundToInt(),15,28,43));cornerRadius=dp(18).toFloat();setStroke(dp(1),Color.argb((160*opacity).roundToInt(),53,84,110))}
+ }
+ private fun layoutChat(){
+  if(!::transcript.isInitialized||root.height==0)return
+  val margins=(footer.layoutParams as? LinearLayout.LayoutParams)?.let{it.topMargin+it.bottomMargin}?:0
+  val available=(root.height-root.paddingTop-root.paddingBottom-header.height-footer.height-margins).coerceAtLeast(0)
+  val height=(available*profile.chatHeight/100f).roundToInt()
+  if(transcript.layoutParams.height!=height)transcript.layoutParams=LinearLayout.LayoutParams(-1,height)
+ }
+ private fun applyChatAppearance(){
+  footer.background=chatPanel()
+  for(i in 0 until bubbles.childCount)bubbles.getChildAt(i).background=chatPanel()
+  layoutChat()
+ }
+ private fun settings(){
+  AlertDialog.Builder(this).setTitle("Ustawienia Iskra Lab").setItems(arrayOf("Wygląd czatu","Połączenie z Iskrą","Głos i język")){_,i->when(i){0->chatSettings();1->connectionSettings();else->voiceSettings()}}.show()
+ }
+ private fun chatSettings(){
+  val c=column()
+  fun slider(name:String,value:Int,min:Int,max:Int,changed:(Int)->Unit){
+   val title=label("$name: $value%",15f);c.addView(title)
+   val bar=SeekBar(this).apply{this.max=max-min;progress=value-min;contentDescription=name}
+   bar.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
+    override fun onProgressChanged(b:SeekBar?,p:Int,user:Boolean){title.text="$name: ${p+min}%";if(user){changed(p+min);applyChatAppearance()}}
+    override fun onStartTrackingTouch(b:SeekBar?){}
+    override fun onStopTrackingTouch(b:SeekBar?){save()}
+   });c.addView(bar,LinearLayout.LayoutParams(-1,dp(48)))
+  }
+  slider("Przezroczystość tła",profile.chatTransparency,0,100){profile=profile.copy(chatTransparency=it)}
+  slider("Wysokość czatu",profile.chatHeight,15,65){profile=profile.copy(chatHeight=it)}
+  c.addView(label("100% przezroczystości usuwa tło; tekst pozostaje czytelny. Wysokość dopasowuje się także do klawiatury.",12f))
+  val dialog=AlertDialog.Builder(this).setTitle("Wygląd czatu").setView(c).setPositiveButton("Gotowe"){_,_->save()}.create()
+  dialog.setOnDismissListener{save()};dialog.show();dialog.window?.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+ }
  private fun connectionSettings(){interrupt();val c=column();val address=EditText(this).apply{hint="Adres bramki HTTPS";setSingleLine(true);setText(connections.getString("url",""))};val passwords=GatewayPasswordStore(this)
   val password=EditText(this).apply{hint="Hasło dostępu";setSingleLine(true);inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD;setText(passwords.read(address.text.toString()))}
   c.addView(address);c.addView(password);val dialog=AlertDialog.Builder(this).setTitle("Połączenie z Iskrą").setView(c).setPositiveButton("Zapisz",null).setNegativeButton("Anuluj",null).create()

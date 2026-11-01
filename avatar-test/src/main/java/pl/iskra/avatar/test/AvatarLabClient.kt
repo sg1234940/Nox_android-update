@@ -52,8 +52,7 @@ class AvatarLabClient internal constructor(client: OkHttpClient? = null, private
             val finality=LabFinality()
             request(Request.Builder().url(endpoint).header("Accept", "application/x-ndjson")
                 .post(input.toString().toRequestBody("application/json; charset=utf-8".toMediaType())).build(), current).use { response ->
-                check(response.code != 401) { "Brak lub nieprawidłowe hasło dostępu. Sprawdź ustawienia połączenia." }
-                check(response.isSuccessful) { "Bramka: HTTP ${response.code}. Niczego nie ponawiam automatycznie." }
+                if (!response.isSuccessful) throw LabFailure.http(response.code,response.peekBody(16384).string())
                 val source = response.body?.source() ?: error("Pusty strumień.")
                 while (!source.exhausted()) {
                     val line = source.readUtf8LineStrict(1024L * 1024)
@@ -63,7 +62,7 @@ class AvatarLabClient internal constructor(client: OkHttpClient? = null, private
                     finality.accept(event)
                     when (event.optString("type")) {
                         "delta" -> onText(event.optString("text"))
-                        "error" -> error("Bramka przerwała odpowiedź: ${event.optString("error").take(80)}")
+                        "error" -> throw LabFailure.code(event.optString("error"))
                         "done" -> { done = event; break }
                     }
                 }
@@ -79,7 +78,7 @@ class AvatarLabClient internal constructor(client: OkHttpClient? = null, private
                 finalResponse=final
                 return final.getString("text")
             }
-            check(index < 16) { "Osiągnięto limit 16 ruchów w jednej próbie. Możesz kontynuować kolejną wiadomością." }
+            if (index >= 16) throw LabFailure.code("avatar_action_limit")
             check(terminal.optJSONObject("final_response") == null && terminal.optString("continuation_receipt").matches(Regex("op-[0-9a-f-]{36}"))) { "Niepowiązane polecenie awatara." }
             check(avatar.optString("name") == "avatar_control") { "Nieznane polecenie awatara." }
             val result = execute(avatar)

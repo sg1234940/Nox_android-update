@@ -1,3 +1,13 @@
+# Kandydat 0.6.4 — wygląd czatu i rozpoznawanie błędów
+
+Menu ⚙ → Wygląd czatu (również lewe menu) udostępnia przezroczystość tła 0–100% oraz wysokość rozmowy 15–65% przestrzeni nad polem wpisywania. Ustawienia działają na istniejące i nowe chmurki, są zapisywane lokalnie i odtwarzane po uruchomieniu. Tylko tło zmienia przezroczystość, tekst i mikrofon zachowują widoczność. Wysokość uwzględnia klawiaturę, nagłówek, dolny panel i insets; ręczne sterowanie nadal ma osobny viewport.
+
+Runtime 01.11: w logach produkcji o 08:12:31 UTC potwierdzono META_GUARD_USAGE hourly_limit hour=30/30 day=30/100. Wcześniej wystąpił także meta_stream_provider_error i rozłączenia klienta; sam zrzut nie rozstrzyga, który z błędów pokazał. Klient dotychczas zamieniał wszystkie wyjątki w ogólny komunikat o adresie/haśle. Teraz whitelistowane komunikaty rozróżniają limit godzinowy/dzienny, dostawcę, timeout, HTTP i limit 16 ruchów. Nie wyświetlają surowej treści odpowiedzi ani wyjątków. Bez zmian limitów serwera, czasu 240 s, ponawiania POST lub aktywacji backendu.
+
+Kandydat źródłowy: code 10 / 0.6.4-test. Poprzedni pełny APK 0.6.3 pozostaje osobnym artefaktem. Nowego pełnego APK nie deklarujemy bez prawdziwego GLB, modułu Promyk i podpisu zgodnego z zainstalowanym Labem. CI kompiluje i sprawdza kod pakowany do pomocniczego APK bez modelu; nie jest to APK do instalacji zamiast pełnego Labu. Wygląd, dotyk, obrót/klawiatura oraz zapis na urządzeniu wymagają testu telefonu.
+
+---
+
 # Aktualizacja 0.6.3 — sterowanie z widocznym awatarem
 
 Pełnoekranowy dialog sterowania i zagnieżdżone okna suwaków zostały zastąpione dolnym panelem. Wszystkie 21 suwaków jest dostępne bezpośrednio w przewijanej liście i działa na żywo. Panel ma maksymalnie 42% dostępnej wysokości, a SurfaceView dostaje pozostałą przestrzeń nad panelem. Nie przyciemnia się sceny. W panelu są widok twarzy/postaci, animacje, zamrożenie i reset. Zamknięcie, Wstecz i otwarcie menu przywracają pełny viewport i pole rozmowy; ręczne sterowanie nadal przerywa próbę Iskry.

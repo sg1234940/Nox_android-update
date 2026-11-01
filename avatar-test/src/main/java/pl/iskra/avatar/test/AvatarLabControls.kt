@@ -48,7 +48,7 @@ class AvatarLabControls(private val activity: Activity, private val avatar: Avat
                 onText={delta->handler.post {if(current())onText(delta)}},execute={request->execute(request,calls,current)},voiceContext=voiceContext)
                 val proof=attempt.finalResponse?.let {JSONObject(it.toString())}
                 handler.post {if(current()){busy=false;client=null;onComplete(answer,proof)}}
-            }catch(_:Exception){handler.post {if(current()){busy=false;client=null;onError("Nie zakończono połączenia. Sprawdź adres, hasło i dostępność bramki. Nie ponawiam operacji automatycznie.")}}}
+            }catch(error:Exception){val message=LabFailure.message(error);handler.post {if(current()){busy=false;client=null;onError(message)}}}
         }
     }
     fun resumed(value:Boolean){inForeground=value;if(!value)cancel()}

@@ -45,6 +45,12 @@ def check(apk, dexdump, version):
     assert '.layoutControls:' in controls, 'Controls must reserve a visible avatar viewport'
     viewport = next(m for m in methods if re.search(r"name\s+: 'layoutControls'", m))
     assert viewport.count('.setLayoutParams:') >= 2, 'Panel and avatar viewport must resize separately'
+    if version == '0.6.4':
+        chat = next(m for m in methods if re.search(r"name\s+: 'chatSettings'", m))
+        assert 'Przezroczystość tła' in chat and 'Wysokość czatu' in chat
+        assert '.layoutChat:' in screen and '.applyChatAppearance:' in screen
+        layout = next(m for m in methods if re.search(r"name\s+: 'layoutChat'", m))
+        assert '.getHeight:' in layout and '.setLayoutParams:' in layout
     print('PASS: packaged screen hides ready status and contains visible build ' + version)
     print('PASS: packaged manual controls use inline sliders and reserve the avatar viewport')
 

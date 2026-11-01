@@ -6,8 +6,10 @@ data class LabPresentation(
     val brightness: Float = 1f, val angle: Float = 0f, val zoom: Float = 1f, val face: Boolean = false,
     val background: String = "black", val inputLanguage: String = "pl", val outputLanguage: String = "pl",
     val voiceId: String = "", val lengthScale: Float = 1f, val silenceMs: Int = 1200,
+    val chatTransparency: Int = 40, val chatHeight: Int = 35,
 ) {
     fun checked(): LabPresentation {
+        require(chatTransparency in 0..100 && chatHeight in 15..65)
         require(brightness.isFinite() && brightness in .2f..2f)
         require(angle.isFinite() && angle in -1.2f..1.2f && zoom.isFinite() && zoom in .65f..1.8f)
         require(lengthScale.isFinite() && lengthScale in .8f..1.2f && silenceMs in 600..3000)

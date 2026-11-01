@@ -86,4 +86,27 @@ class AvatarLabClientTest {
         server.enqueue(advertised()); server.enqueue(MockResponse().setResponseCode(503)); var n=0
         assertThrows(IllegalStateException::class.java) { client.run(server.url("/").toString(),"c",1,"x",{true},{},{ n++; JSONObject() }) }; assertEquals(0,n); assertEquals(2,server.requestCount)
     }
+
+    @Test fun hourlyLimitBodyReachesUiWithoutRetryOrExecution() = fixture { server, client ->
+        server.enqueue(advertised());server.enqueue(MockResponse().setResponseCode(429).setBody("""{"error":"hourly_limit","meta_guard":{"hourCount":30,"hourlyLimit":30},"private":"DO_NOT_SHOW"}"""))
+        var executed=0
+        val e=assertThrows(LabFailure::class.java){client.run(server.url("/").toString(),"c",1,"x",{true},{},{executed++;JSONObject()})}
+        assertTrue(LabFailure.message(e).contains("godzinowy"));assertTrue(e.message.orEmpty().contains("30/30"));assertFalse(e.message.orEmpty().contains("DO_NOT_SHOW"))
+        assertEquals(0,executed);assertEquals(2,server.requestCount)
+    }
+    @Test fun guardLimitDuringStreamIsNotReportedAsConnectionFailure() = fixture { server, client ->
+        server.enqueue(advertised());server.enqueue(MockResponse().setBody("""{"type":"error","error":"meta_guard_hourly_limit"}"""+"\n"))
+        val e=assertThrows(LabFailure::class.java){client.run(server.url("/").toString(),"c",1,"x",{true},{},{JSONObject()})}
+        assertTrue(e.message.orEmpty().contains("godzinowy"));assertEquals(2,server.requestCount)
+    }
+    @Test fun delayedAnswerRemainsValidAndIsNotRetried() = fixture { server, client ->
+        server.enqueue(advertised());server.enqueue(MockResponse().setBody(final()+"\n").setBodyDelay(2,java.util.concurrent.TimeUnit.SECONDS))
+        assertEquals("Gotowe",client.run(server.url("/").toString(),"c",1,"x",{true},{},{JSONObject()}));assertEquals(2,server.requestCount)
+    }
+    @Test fun sixteenthMoveIsConfirmedAndLimitDoesNotExecuteSeventeenth() = fixture { server, client ->
+        server.enqueue(advertised());repeat(17){i->server.enqueue(MockResponse().setBody(request().replace("move_1","move_${i+1}")+"\n"))}
+        var executed=0
+        val e=assertThrows(LabFailure::class.java){client.run(server.url("/").toString(),"c",1,"x",{true},{},{executed++;JSONObject()})}
+        assertEquals(16,executed);assertEquals(18,server.requestCount);assertTrue(e.message.orEmpty().contains("16 ruchów"))
+    }
 }
