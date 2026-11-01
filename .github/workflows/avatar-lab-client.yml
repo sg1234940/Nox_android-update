@@ -1,0 +1,52 @@
+name: Avatar lab client
+on:
+  pull_request:
+    paths:
+      - 'avatar/**'
+      - 'avatar-test/**'
+      - 'avatar-lab/**'
+      - '.github/workflows/avatar-lab-client.yml'
+permissions:
+  contents: read
+jobs:
+  client:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Install pinned platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          manager=$(find "$sdk/cmdline-tools" -path '*/bin/sdkmanager' | sort -V | tail -n 1)
+          test -x "$manager"
+          yes | "$manager" --licenses > /dev/null || true
+          "$manager" --install 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Compile both Android modules and test HTTPS, finality and presentation
+        run: |
+          gradle -p avatar-lab :avatar:testDebugUnitTest --tests '*AvatarControllerTest' --tests '*BodyPlaybackTest' --tests '*LabPresentationTest' --tests '*BackgroundGlbTest'
+          gradle -p avatar-lab :avatar-test:testDebugUnitTest
+      - name: Verify packaged status layout (compile-only APK without model asset)
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle -p avatar-lab :avatar-test:assembleDebug --no-build-cache
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          python3 avatar-lab/check_status_apk.py avatar-test/build/outputs/apk/debug/avatar-test-debug.apk --dexdump "$sdk/build-tools/36.0.0/dexdump" --version 0.6.5
+      - name: Preserve test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: avatar-lab-client-tests
+          path: |
+            avatar/build/test-results/testDebugUnitTest/
+            avatar-test/build/test-results/testDebugUnitTest/
+          if-no-files-found: warn
