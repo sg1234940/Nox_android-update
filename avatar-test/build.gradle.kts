@@ -7,7 +7,7 @@ android {
     compileSdk = 36
     buildToolsVersion = "36.0.0"
     defaultConfig {
-        applicationId = "pl.iskra.avatar.test.v4"
+        applicationId = "pl.iskra.avatar.lab"
         minSdk = 26
         targetSdk = 36
         versionCode = 10
