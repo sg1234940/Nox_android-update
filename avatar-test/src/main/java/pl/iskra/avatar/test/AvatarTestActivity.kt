@@ -85,6 +85,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   installGestures();applyCamera();avatar.setAppearance(profile.hologram,profile.brightness);refreshAction();buildDrawer()
   root.setOnApplyWindowInsetsListener {v,insets->v.setPadding(0,insets.systemWindowInsetTop,0,insets.systemWindowInsetBottom);insets}
   root.addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->layoutControls();layoutChat()}
+  footer.addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->layoutChat()}
   setContentView(root);root.requestApplyInsets();root.post {applyChatAppearance()}
  }
  private fun refreshAction(){val mode=profile.action(input.text.isNotBlank(),listening);action.setImageResource(when(mode){"SEND"->android.R.drawable.ic_menu_send;"STOP"->android.R.drawable.ic_media_pause;else->android.R.drawable.ic_btn_speak_now});action.contentDescription=when(mode){"SEND"->"Wyślij";"STOP"->"Przerwij nagrywanie";else->"Mikrofon"}}
