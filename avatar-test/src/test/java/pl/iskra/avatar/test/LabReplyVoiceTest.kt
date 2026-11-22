@@ -45,4 +45,21 @@ class LabReplyVoiceTest {
         val turn = requireNotNull(LabReplyVoice.forTurn(profile.copy(lengthScale = 1.2f), listOf(voice), false))
         assertEquals(1.2, turn.context().getDouble("preferred_length_scale"), 0.0)
     }
+    @Test fun phrasesReachOnlyTheNegotiatedSelectedPolishVoice() {
+        val selected = voice.copy(name = "pl_PL-zenski_wg_glos-medium")
+        val turn = requireNotNull(LabReplyVoice.forTurn(profile.copy(expressiveSpeech = true), listOf(selected), true))
+        assertTrue(turn.context().getBoolean("sentence_phrases"))
+        val final = final()
+        val motion = final.getJSONObject("voice_plan_candidate").getJSONObject("voice_motion")
+        val phrase = JSONObject().put("end", 5).put("length_scale", 1.1).put("gain_db", -2)
+        motion.put("phrases", org.json.JSONArray().put(phrase))
+        assertEquals(listOf(LabVoice.Phrase(5, 1.1f, -2f, null)), turn.speech("Cześć", final, true)!!.phrases)
+        assertTrue(turn.speech("Cześć", final, false)!!.phrases.isEmpty())
+        phrase.put("end", 3)
+        assertTrue(turn.speech("Cześć", final, true)!!.phrases.isEmpty())
+        val other = requireNotNull(LabReplyVoice.forTurn(profile.copy(expressiveSpeech = true), listOf(voice), true))
+        assertFalse(other.context().has("sentence_phrases"))
+        val off = requireNotNull(LabReplyVoice.forTurn(profile, listOf(selected), true))
+        assertFalse(off.context().has("expressive_tempo"))
+    }
 }

@@ -38,7 +38,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
  private var voice:LabVoice?=null;private var foreground=false;private var handsFree=false
  private var listening=false;private var talking=false;private var drawerOpen=false;private var textMode=false
  private var turn=0L;private var sequence=0L;private var playback:String?=null
- private var resumedTurn=false;private var pendingImport="avatar";private var permissionOwner=0L
+ private var testingMic=false;private var resumedTurn=false;private var pendingImport="avatar";private var pendingMicPermission=0;private var grantedMicRequest=0
  private var life=0L;private var initializedAppearance=false
  private var previewDialog:AlertDialog?=null
  private var voiceDialog:AlertDialog?=null;private var voiceImportDialog:AlertDialog?=null
@@ -64,7 +64,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   root.addView(overlay,FrameLayout.LayoutParams(-1,-1))
   header=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL}
   header.addView(button("☰"){openDrawer()},LinearLayout.LayoutParams(dp(60),dp(52)))
-  header.addView(label("Iskra Lab 0.6.7",18f),LinearLayout.LayoutParams(0,dp(56),1f))
+  header.addView(label("Iskra Lab 0.6.8",18f),LinearLayout.LayoutParams(0,dp(56),1f))
   header.addView(button("⚙"){settings()},LinearLayout.LayoutParams(dp(60),dp(52)))
   overlay.addView(header);overlay.addView(View(this),LinearLayout.LayoutParams(-1,0,1f))
   notice=label("",12f).apply {visibility=View.GONE;setPadding(dp(12),dp(4),dp(12),0);accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE}
@@ -81,7 +81,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   lab=AvatarLabControls(this,avatar,begin={newTurn()},send=::emit,camera={profile.angle to profile.face},setCamera={a,f->profile=profile.copy(angle=a,face=f);applyCamera();save()},refresh={})
   voice=try {Class.forName("pl.iskra.avatar.voice.PromykLabVoice").getConstructor(android.content.Context::class.java).newInstance(this) as LabVoice}catch(_:Exception){null}
   voice?.events=this;refreshVoices()
-  action.setOnClickListener {if(input.text.isNotBlank())sendTyped() else if(listening&&!talking){voice?.finishListening();sayStatus("Kończę nagranie…")} else if(playingReply&&!handsFree){interrupt();sayStatus("Zatrzymano głos.")}else if(talking||lab.busy){interrupt();startVoice()}else startVoice()}
+  action.setOnClickListener {if(input.text.isNotBlank())sendTyped() else if(listening&&!talking){voice?.finishListening();sayStatus("Kończę nagranie…")} else if(testingMic){interrupt();sayStatus("Przerwano próbę mikrofonu.")}else if(playingReply&&!handsFree){interrupt();sayStatus("Zatrzymano głos.")}else if(talking||lab.busy){interrupt();startVoice()}else startVoice()}
   input.setOnFocusChangeListener {_,focus->if(focus){interrupt();textMode=true;transcript.visibility=View.VISIBLE;refreshAction()}}
   input.addTextChangedListener(object:TextWatcher {override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){};override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){refreshAction()};override fun afterTextChanged(s:Editable?){} })
   avatar.onStatus={message->if(message.startsWith("Model gotowy")){sayStatus("");if(!initializedAppearance){initializedAppearance=true;applyProfileModel();applyBackground()}}else sayStatus(message)}
@@ -95,22 +95,25 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
  private fun sayStatus(text:String){notice.text=text;notice.visibility=if(text.isBlank()||text=="Gotowe")View.GONE else View.VISIBLE}
  private fun save(){try{preferences.write(profile)}catch(_:Exception){sayStatus("Nie zapisano ustawień. Dotychczasowy zapis pozostaje zachowany.")}}
  private fun applyCamera(){avatar.setCamera(profile.angle,profile.face);avatar.setZoom(profile.zoom)}
- private fun interrupt(){handsFree=false;playingReply=false;speechError=false;life++;voice?.stop();listening=false;talking=false;playback=null;if(::lab.isInitialized)lab.cancel();emit(AvatarController.Command.Interrupted);refreshAction()}
- private fun startVoice(){
+ private fun interrupt(){testingMic=false;handsFree=false;playingReply=false;speechError=false;life++;voice?.stop();listening=false;talking=false;playback=null;if(::lab.isInitialized)lab.cancel();emit(AvatarController.Command.Interrupted);refreshAction()}
+ private fun startVoice(testOnly:Boolean=false){
   if(voice==null){sayStatus("Ten wariant APK nie zawiera Promyka. Potrzebna jest pełna kompilacja Labu.");return}
-  if(voices.none{it.id==profile.voiceId && it.language==profile.outputLanguage} || profile.inputLanguage !in ears){sayStatus("Wybierz zainstalowane modele w Głos i język.");voiceSettings();return}
-  if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){permissionOwner=life;requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO),81);return}
+  if((!testOnly && voices.none{it.id==profile.voiceId && it.language==profile.outputLanguage}) || profile.inputLanguage !in ears){sayStatus("Wybierz zainstalowane modele w Głos i język.");voiceSettings();return}
+  if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){pendingMicPermission=if(testOnly)85 else 81;requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO),pendingMicPermission);return}
   input.clearFocus();(getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(input.windowToken,0)
-  handsFree=true;textMode=false;transcript.visibility=View.GONE;voice?.listen(voiceSettingsValue());refreshAction()
+  testingMic=testOnly;handsFree=!testOnly;textMode=false;transcript.visibility=View.GONE;voice?.listen(voiceSettingsValue());refreshAction()
  }
  private fun voiceSettingsValue()=LabVoice.Settings(profile.inputLanguage,profile.outputLanguage,profile.voiceId,profile.lengthScale,profile.silenceMs)
  private fun refreshVoices(done:((String?)->Unit)?=null){voice?.catalogue {available,languages,error->if(isFinishing||isDestroyed)return@catalogue;voices=available;ears=languages
-  if(voices.none{it.id==profile.voiceId})voices.firstOrNull{it.language==profile.outputLanguage}?.let{profile=profile.copy(voiceId=it.id);save()};error?.let(::sayStatus);done?.invoke(error)}}
- private fun playSpeech(text:String,voiceId:String,tempo:Float){
+  if(voices.none{it.id==profile.voiceId}){
+   val matching=voices.filter { it.language==profile.outputLanguage }
+   (matching.firstOrNull { it.supportsSentenceExpression } ?: matching.firstOrNull())?.let { profile=profile.copy(voiceId=it.id);save() }
+  };error?.let(::sayStatus);done?.invoke(error)}}
+ private fun playSpeech(text:String,voiceId:String,tempo:Float,phrases:List<LabVoice.Phrase> = emptyList()){
   speechError=false
   playingReply=true
   refreshAction()
-  try { requireNotNull(voice).speak(text,voiceId,tempo) }
+  try { requireNotNull(voice).speak(text,voiceId,tempo,phrases) }
   catch(_:Exception){ playingReply=false;handsFree=false;refreshAction();showTranscript();sayStatus("Nie udało się uruchomić wybranego głosu Piper.") }
  }
  private fun showTranscript(){textMode=true;transcript.visibility=View.VISIBLE}
@@ -124,11 +127,11 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   bubble(text,true);sayStatus("Myślę…")
   val wantsVoice=handsFree || profile.speakTypedReplies
   val replyVoice=LabReplyVoice.forTurn(profile,voices,handsFree)
-  lab.submit(base,password,text,replyVoice?.context(),onText={},onComplete={answer,proof->
+  lab.submit(base,password,text,replyVoice?.context(),onText={},onComplete={answer,proof,phrasesSupported->
    emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.IDLE));bubble(answer,false)
-   val speech=replyVoice?.speech(answer,proof)
+   val speech=replyVoice?.speech(answer,proof,phrasesSupported)
    if(speech!=null) {
-    playSpeech(answer,speech.voiceId,speech.tempo)
+    playSpeech(answer,speech.voiceId,speech.tempo,speech.phrases)
    } else if(wantsVoice) {
     handsFree=false;showTranscript()
     sayStatus(when {
@@ -144,13 +147,21 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   when(value){LabVoice.State.LISTENING->{listening=true;if(!talking)emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.LISTENING))}
    LabVoice.State.RECOGNIZING->{listening=false;if(!talking)emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.THINKING))}
    LabVoice.State.SPEAKING->{talking=true;if(handsFree&&!listening)voice?.listen(voiceSettingsValue(),true)}
-   LabVoice.State.FAILED->{listening=false;if(!talking){handsFree=false;playingReply=false;speechError=true;showTranscript()}}
-   LabVoice.State.IDLE->{listening=false;if(!talking)emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.IDLE))}
+   LabVoice.State.FAILED->{testingMic=false;listening=false;if(!talking){handsFree=false;playingReply=false;speechError=true;showTranscript()}}
+   LabVoice.State.IDLE->{testingMic=false;listening=false;if(!talking)emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.IDLE))}
    else->Unit}
   notice.setTextColor(when(value){LabVoice.State.LISTENING->0xff24d2ed.toInt();LabVoice.State.SPEAKING->0xff57e2a1.toInt();LabVoice.State.RECOGNIZING,LabVoice.State.SYNTHESIZING->0xffffd468.toInt();else->0xffe4edf6.toInt()})
   if(message.isNotBlank())sayStatus(message);refreshAction()
  }
- override fun transcript(text:String){if(foreground&&handsFree){listening=false;submit(text)}}
+ override fun transcript(text:String){
+  if(!foreground)return
+  listening=false
+  if(testingMic){
+   testingMic=false
+   emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.IDLE));showTranscript();refreshAction()
+   sayStatus("Parakeet usłyszał: $text")
+  } else if(handsFree) submit(text)
+ }
  override fun speechDetected(){if(foreground&&handsFree&&talking){lab.cancel();playingReply=false;voice?.interruptSpeech();talking=false;playback=null;emit(AvatarController.Command.Interrupted);sayStatus("Słucham…")}}
  override fun playback(id:String,positionMs:Long,energy:Float){if(!foreground||!playingReply)return;if(playback!=id){playback=id;emit(AvatarController.Command.SpeechStarted(id))};emit(AvatarController.Command.SpeechFrame(id,positionMs,energy))}
  override fun playbackEnded(){if(!foreground)return;playingReply=false;playback?.let{emit(AvatarController.Command.SpeechStopped(it))};playback=null;talking=false
@@ -223,12 +234,18 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
     playSpeech("Dzień dobry. Słyszysz mnie? To ja, Iskra. Tak brzmi mój głos.",selected.id,profile.lengthScale)
    }
   })
-  c.addView(label("Język rozpoznawania mowy"));val inputs=(listOf(profile.inputLanguage)+ears).distinct();c.addView(spinner(inputs.map{if(it in ears)it else "$it · brak modelu"},inputs.indexOf(profile.inputLanguage)){profile=profile.copy(inputLanguage=inputs[it]);save()})
+  c.addView(label(if (ears.isEmpty()) "Parakeet TDT v3 INT8 · wybierz rozpakowany folder modelu" else "Parakeet TDT v3 INT8 · gotowy"))
+  c.addView(button("Sprawdź mikrofon i Parakeet") { voiceDialog?.dismiss(); interrupt(); startVoice(testOnly=true) })
+  c.addView(Switch(this).apply {
+   text="Ekspresja głosu Iskry";isChecked=profile.expressiveSpeech
+   setOnCheckedChangeListener { _,value -> profile=profile.copy(expressiveSpeech=value);save() }
+  })
+  c.addView(label("Język wejściowy · model wielojęzyczny"));val inputs=(listOf(profile.inputLanguage)+ears).distinct();c.addView(spinner(inputs.map{if(it in ears)it else "$it · brak modelu"},inputs.indexOf(profile.inputLanguage)){profile=profile.copy(inputLanguage=inputs[it]);save()})
   c.addView(label("Język odpowiedzi"));val outputs=(listOf(profile.outputLanguage)+voices.map{it.language}).distinct();c.addView(spinner(outputs.map{tag->if(voices.any{it.language==tag})tag else "$tag · brak głosu"},outputs.indexOf(profile.outputLanguage)){val lang=outputs[it];val selected=voices.firstOrNull{v->v.language==lang};profile=profile.copy(outputLanguage=lang,voiceId=selected?.id.orEmpty());save()})
-  c.addView(label("Głos (faktycznie zainstalowane modele)"));if(voices.isEmpty())c.addView(label("Brak modeli. Zaimportuj folder Vosk/Piper.")) else c.addView(spinner(listOf("Wybierz głos…")+voices.map{"${it.language} · ${it.name}"},voices.indexOfFirst{it.id==profile.voiceId}+1){if(it>0){val v=voices[it-1];profile=profile.copy(voiceId=v.id,outputLanguage=v.language);save()}})
+  c.addView(label("Głos (faktycznie zainstalowane modele)"));if(voices.isEmpty())c.addView(label("Brak modeli. Zaimportuj rozpakowany folder głosu Piper.")) else c.addView(spinner(listOf("Wybierz głos…")+voices.map{"${it.language} · ${it.name}"},voices.indexOfFirst{it.id==profile.voiceId}+1){if(it>0){val v=voices[it-1];profile=profile.copy(voiceId=v.id,outputLanguage=v.language);save()}})
   c.addView(button("Tempo mówienia"){sliderDialog("Długość głosu: mniej = szybciej",profile.lengthScale,.8f,1.2f){profile=profile.copy(lengthScale=it);save()}})
   c.addView(button("Przerwa kończąca wypowiedź"){sliderDialog("Cisza (ms)",profile.silenceMs.toFloat(),600f,3000f){profile=profile.copy(silenceMs=it.roundToInt());save()}})
-  c.addView(button("Importuj folder modeli Vosk i Piper"){voiceDialog?.dismiss();voiceDialog=null;startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),84)})
+  c.addView(button("Importuj folder Parakeet lub Piper"){voiceDialog?.dismiss();voiceDialog=null;startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),84)})
   voiceDialog=AlertDialog.Builder(this).setTitle("Głos i język · domyślnie polski").setView(ScrollView(this).apply{addView(c)}).setPositiveButton("Zamknij",null).create().also{it.show()}
  }
  private fun showVoiceImportProgress(){
@@ -246,7 +263,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   fun finished(error:String?){
    if(isFinishing||isDestroyed)return
    importingVoices=false;voiceImportDialog?.dismiss();voiceImportDialog=null
-   voiceImportMessage=error?:"Import zakończony. Katalog: ${voices.size} głosów Piper, ${ears.size} języków rozpoznawania Vosk."
+   voiceImportMessage=error?:"Import zakończony. Katalog: ${voices.size} głosów Piper, ${if(ears.isEmpty()) "brak Parakeeta" else "Parakeet TDT v3 INT8 gotowy"}."
    sayStatus(voiceImportMessage!!);if(foreground)voiceSettings()
   }
   adapter.importModels(uri){error->if(isFinishing||isDestroyed)return@importModels;if(error!=null)finished(error)else refreshVoices{finished(it)}}
@@ -326,7 +343,15 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   val scale=ScaleGestureDetector(this,object:ScaleGestureDetector.SimpleOnScaleGestureListener(){override fun onScale(d:ScaleGestureDetector):Boolean{profile=profile.copy(zoom=(profile.zoom*d.scaleFactor).coerceIn(.65f,1.8f));applyCamera();return true};override fun onScaleBegin(d:ScaleGestureDetector):Boolean{interrupt();return true};override fun onScaleEnd(d:ScaleGestureDetector){save()}})
   avatar.setOnTouchListener{_,e->scale.onTouchEvent(e);when(e.actionMasked){MotionEvent.ACTION_DOWN->{x=e.x;down=e.x;moved=false;true};MotionEvent.ACTION_MOVE->{if(!scale.isInProgress){val dx=e.x-x;if(kotlin.math.abs(e.x-down)>dp(8)){if(!moved)interrupt();moved=true;profile=profile.copy(angle=(profile.angle+dx/500f).coerceIn(-1.2f,1.2f));applyCamera()};x=e.x};true};MotionEvent.ACTION_UP->{if(down<dp(24)&&e.x-down>dp(45))openDrawer()else if(moved)save();true};else->true}}
  }
- override fun onRequestPermissionsResult(code:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(code,permissions,results);if(code==81&&foreground&&permissionOwner==life){if(results.firstOrNull()==PackageManager.PERMISSION_GRANTED)startVoice()else sayStatus("Bez zgody na mikrofon można nadal pisać.")}}
+ override fun onRequestPermissionsResult(code:Int,permissions:Array<out String>,results:IntArray){
+  super.onRequestPermissionsResult(code,permissions,results)
+  if(code!=pendingMicPermission || code !in setOf(81,85))return
+  pendingMicPermission=0
+  if(results.firstOrNull()!=PackageManager.PERMISSION_GRANTED){sayStatus("Bez zgody na mikrofon można nadal pisać.");return}
+  if(foreground)startVoice(testOnly=code==85) else grantedMicRequest=code
+ }
+ override fun onStop(){pendingMicPermission=0;grantedMicRequest=0;super.onStop()}
+
  override fun onActivityResult(code:Int,result:Int,data:Intent?){super.onActivityResult(code,result,data)
   if(code==84){if(result!=RESULT_OK){sayStatus("Anulowano wybór folderu modeli.");return};val folder=data?.data;if(folder==null){sayStatus("Nie otrzymano folderu modeli. Wybierz folder ponownie.");return};importVoiceFolder(folder);return}
   val uri=data?.data ?: return;if(result!=RESULT_OK)return
@@ -340,7 +365,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
    }}catch(_:Exception){main.post{if(!isDestroyed)sayStatus("Nie udało się wczytać pliku. Sprawdź format i rozmiar.")}}catch(_:OutOfMemoryError){main.post{if(!isDestroyed)sayStatus("Za mało pamięci na ten plik.")}}}
  }
  private fun java.io.InputStream.readBytesBounded(limit:Int):ByteArray{val out=java.io.ByteArrayOutputStream();val buffer=ByteArray(65536);var total=0;while(true){val n=read(buffer);if(n<0)break;total+=n;require(total<=limit);out.write(buffer,0,n)};return out.toByteArray()}
- override fun onResume(){super.onResume();foreground=true;if(resumedTurn)newTurn();resumedTurn=true;avatar.setResumed(true);lab.resumed(true)}
+ override fun onResume(){super.onResume();foreground=true;if(resumedTurn)newTurn();resumedTurn=true;avatar.setResumed(true);lab.resumed(true);if(grantedMicRequest!=0){val request=grantedMicRequest;grantedMicRequest=0;startVoice(testOnly=request==85)}}
  override fun onPause(){foreground=false;previewDialog?.dismiss();previewDialog=null;interrupt();lab.resumed(false);avatar.setResumed(false);super.onPause()}
  override fun onDestroy(){voiceDialog?.dismiss();voiceImportDialog?.dismiss();voice?.close();lab.destroy();io.shutdownNow();main.removeCallbacksAndMessages(null);super.onDestroy()}
 }

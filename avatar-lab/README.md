@@ -1,3 +1,9 @@
+# Iskra Lab 0.6.8 — Promyk i Parakeet
+
+Lab rozpoznaje mowę lokalnie przez Parakeet TDT 0.6B v3 INT8. W ustawieniach **Głos i język** można zaimportować sam rozpakowany folder Parakeeta. Taki import zachowuje głosy Piper zapisane przez poprzedni Lab. Przycisk **Sprawdź mikrofon i Parakeet** pokazuje lokalną transkrypcję. Aby sprawdzić głos i ruch twarzy, wybierz **Sprawdź głos i mimikę**.
+
+Przełącznik **Ekspresja głosu Iskry** włącza negocjowanie ekspresji z bramką. Obsługiwany głos `pl_PL-zenski_wg_glos-medium` może korzystać z tempa, ściszenia i pauz dla zdań, jeśli bramka zgłasza tę funkcję.
+
 # Iskra Lab 0.6.7 — mimika podczas mówienia
 
 Na wbudowanym modelu policzki podążają za szczęką. Brwi i pochylenie głowy reagują na akcenty odtwarzanego głosu. Próbę lokalną uruchamia przycisk **Sprawdź głos i mimikę** w ustawieniach głosu.

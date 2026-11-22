@@ -15,6 +15,8 @@ class AvatarLabClient internal constructor(client: OkHttpClient? = null, private
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(240, TimeUnit.SECONDS).callTimeout(240, TimeUnit.SECONDS).build()
     @Volatile private var active: okhttp3.Call? = null
     @Volatile private var cancelled = false
+    var phrasesNegotiated = false
+        private set
     var finalResponse: JSONObject? = null
         private set
     fun cancel() { cancelled = true; active?.cancel() }
@@ -34,8 +36,12 @@ class AvatarLabClient internal constructor(client: OkHttpClient? = null, private
         val uri = URI(base.trim().trimEnd('/'))
         require(uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.rawUserInfo == null && uri.rawQuery == null && uri.rawFragment == null) { "Podaj adres HTTPS bramki Iskry." }
         val endpoint = uri.toString().trimEnd('/').removeSuffix("/v1") + "/v1/iskra/chat-stream"
+        var expressiveSupported=false
+        var phraseSupport=false
         var tempoSupported=false
         request(Request.Builder().url(endpoint).method("OPTIONS", null).build(), current).use {
+            expressiveSupported=it.header("X-Iskra-Expressive-Tempo")=="1"
+            phraseSupport=expressiveSupported && it.header("X-Iskra-Voice-Phrases")=="1"
             tempoSupported=it.header("X-Iskra-Voice-Features").orEmpty().split(',').any {v->v.trim()=="preferred_length_scale"}
             check(it.isSuccessful && it.header("X-Iskra-Avatar-Features") == "avatar-control/v1") {
                 "Ta bramka nie ma jeszcze włączonego sterowania awatarem. Potrzebna jest aktualizacja backendu."
@@ -45,7 +51,14 @@ class AvatarLabClient internal constructor(client: OkHttpClient? = null, private
         val input = JSONObject().put("messages", messages).put("conversation_id", conversation).put("transcript_revision", revision)
             .put("continuation_protocol", "phone/v1").put("internetDownloadAllowed", false)
             .put("device_capabilities", JSONObject().put("schema", "iskra.device/v1").put("avatar", JSONObject().put("schema", "iskra.avatar/v1").put("enabled", true)))
-        voiceContext?.let {original->val value=JSONObject(original.toString());if(!tempoSupported)value.remove("preferred_length_scale");input.put("voice_context",value)}
+        phrasesNegotiated = phraseSupport && voiceContext?.optBoolean("sentence_phrases") == true
+        voiceContext?.let { original ->
+            val value = JSONObject(original.toString())
+            if (!tempoSupported) value.remove("preferred_length_scale")
+            if (!expressiveSupported) value.remove("expressive_tempo")
+            if (!phrasesNegotiated) { value.remove("sentence_phrases"); value.remove("phrase_limits") }
+            input.put("voice_context", value)
+        }
         repeat(17) { index ->
             checkCurrent(current)
             var done: JSONObject? = null

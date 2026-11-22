@@ -4,7 +4,10 @@ import android.net.Uri
 
 /** Optional adapter implemented by Iskra's existing private Promyk module, never a cloud fallback. */
 interface LabVoice : AutoCloseable {
-    data class Voice(val id: String, val name: String, val language: String)
+    data class Voice(val id: String, val name: String, val language: String) {
+        val supportsSentenceExpression get() = language == "pl" && name == "pl_PL-zenski_wg_glos-medium"
+    }
+    data class Phrase(val end: Int, val lengthScale: Float, val gainDb: Float, val pauseAfterMs: Int?)
     data class Settings(val inputLanguage: String = "pl", val outputLanguage: String = "pl", val voiceId: String = "",
         val lengthScale: Float = 1f, val silenceMs: Int = 1200)
     interface Events {
@@ -20,7 +23,7 @@ interface LabVoice : AutoCloseable {
     fun importModels(folder: Uri, callback: (String?) -> Unit)
     fun listen(settings: Settings, echoGuarded: Boolean = false)
     fun finishListening()
-    fun speak(text: String, voiceId: String, lengthScale: Float)
+    fun speak(text: String, voiceId: String, lengthScale: Float, phrases: List<Phrase> = emptyList())
     fun interruptSpeech()
     fun stop()
 }

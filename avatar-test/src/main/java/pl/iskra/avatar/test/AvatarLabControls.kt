@@ -37,7 +37,7 @@ class AvatarLabControls(private val activity: Activity, private val avatar: Avat
     private var applying=false
     private data class Execution(val result:JSONObject,val preview:AvatarSurfaceView.Preview?=null)
     fun submit(base:String,password:String,text:String,voiceContext:JSONObject?,
-        onText:(String)->Unit,onComplete:(String,JSONObject?)->Unit,onError:(String)->Unit) {
+        onText:(String)->Unit,onComplete:(String,JSONObject?,Boolean)->Unit,onError:(String)->Unit) {
         check(inForeground && !busy)
         cancel();val owner=generation.incrementAndGet();begin();busy=true
         val attempt=AvatarLabClient(password=password);client=attempt
@@ -47,7 +47,7 @@ class AvatarLabControls(private val activity: Activity, private val avatar: Avat
             try {val answer=attempt.run(base,conversation,rev,text,current,
                 onText={delta->handler.post {if(current())onText(delta)}},execute={request->execute(request,calls,current)},voiceContext=voiceContext)
                 val proof=attempt.finalResponse?.let {JSONObject(it.toString())}
-                handler.post {if(current()){busy=false;client=null;onComplete(answer,proof)}}
+                handler.post {if(current()){busy=false;client=null;onComplete(answer,proof,attempt.phrasesNegotiated)}}
             }catch(error:Exception){val message=LabFailure.message(error);handler.post {if(current()){busy=false;client=null;onError(message)}}}
         }
     }
