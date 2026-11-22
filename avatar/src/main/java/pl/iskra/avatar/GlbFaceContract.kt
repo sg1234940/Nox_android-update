@@ -12,6 +12,7 @@ data class GlbFaceContract(
     val primitiveCount: Int = 1,
     val materialColors: List<FloatArray> = emptyList(),
     val materialEmissions: List<FloatArray> = emptyList(),
+    val joints: List<String> = emptyList(),
 ) {
     val indices: Map<String, Int> = names.withIndex().associate { it.value to it.index }
 }
@@ -56,7 +57,7 @@ object GlbFaceContractReader {
         require(extras.getJSONObject("iskraFacialRig").getString("schema") == SCHEMA) { "Wrong facial schema" }
         val nameArray = extras.getJSONArray("targetNames")
         val names = (0 until nameArray.length()).map { nameArray.getString(it) }
-        require(names == EXPECTED) { "Morph target order/names mismatch" }
+        require(names == EXPECTED || names == AvatarController.MORPHS) { "Morph target order/names mismatch" }
         val primitives = mesh.getJSONArray("primitives")
         require(primitives.length() in 1..2) { "Unsupported primitive count" }
         if (primitives.length() == 2) {
@@ -89,6 +90,14 @@ object GlbFaceContractReader {
             FloatArray(3){value?.optDouble(it,0.0)?.toFloat() ?: 0f}
         }
         require((colors+emissions).all { a -> a.all { it.isFinite() && it >= 0f } })
-        return GlbFaceContract(nodeName, names, animationNames, primitives.length(),colors,emissions)
+        val skinIndex = nodes.getJSONObject(matches.single()).optInt("skin", -1)
+        val jointIndices = root.optJSONArray("skins")?.optJSONObject(skinIndex)?.optJSONArray("joints")
+        val joints = (0 until (jointIndices?.length() ?: 0)).map {
+            nodes.getJSONObject(jointIndices!!.getInt(it)).optString("name")
+        }.filter { it.matches(Regex("[A-Za-z][A-Za-z0-9_.-]{0,63}")) }
+        // gltfio resolves by name. Ambiguous names cannot identify a single transform.
+        val nodeCounts = (0 until nodes.length()).groupingBy { nodes.getJSONObject(it).optString("name") }.eachCount()
+        return GlbFaceContract(nodeName, names, animationNames, primitives.length(),colors,emissions,
+            joints.distinct().filter { nodeCounts[it] == 1 }.take(128))
     }
 }

@@ -50,7 +50,7 @@ class AvatarLabClient internal constructor(client: OkHttpClient? = null, private
         val messages = JSONArray().put(JSONObject().put("role", "user").put("content", text))
         val input = JSONObject().put("messages", messages).put("conversation_id", conversation).put("transcript_revision", revision)
             .put("continuation_protocol", "phone/v1").put("internetDownloadAllowed", false)
-            .put("device_capabilities", JSONObject().put("schema", "iskra.device/v1").put("avatar", JSONObject().put("schema", "iskra.avatar/v1").put("enabled", true)))
+            .put("device_capabilities", JSONObject().put("schema", "iskra.device/v1").put("avatar", JSONObject().put("schema", "iskra.avatar/v1").put("enabled", true).put("rig", "joints/v1")))
         phrasesNegotiated = phraseSupport && voiceContext?.optBoolean("sentence_phrases") == true
         voiceContext?.let { original ->
             val value = JSONObject(original.toString())

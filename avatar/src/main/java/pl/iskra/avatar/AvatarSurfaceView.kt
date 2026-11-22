@@ -41,7 +41,7 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
     private var modelRequest = 0L
     private var backgroundRequest = 0L
     private var selectedFile: File? = null
-    private var lastWeights = FloatArray(21)
+    private var lastWeights = FloatArray(AvatarController.MORPHS.size)
     private var nextDelay = 0L
     fun setZoom(value: Float) { checkMain(); require(value.isFinite() && value in .65f..1.8f); zoom=value; invalidatePreview() }
     fun setAppearance(value: Boolean, light: Float) { checkMain(); require(light.isFinite() && light in .2f..2f); hologram=value;brightness=light;invalidatePreview() }
@@ -55,7 +55,7 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
                 if(file==null) require(MessageDigest.getInstance("SHA-256").digest(bytes).joinToString(""){"%02x".format(it)}==MODEL_SHA256)
                 val parsed=GlbFaceContractReader.read(bytes)
                 handler.post { if(request==modelRequest && session===owner && isAttachedToWindow) {
-                    try { owner.load(bytes,parsed);selectedFile=file;cancelCapture();schedule();callback(true) }
+                    try { owner.load(bytes,parsed,file==null);selectedFile=file;cancelCapture();schedule();callback(true) }
                     catch(_:Exception){onStatus("Nie udało się zmienić modelu. Zachowano poprzedni.");callback(false)}
                 } }
             } catch(_:Exception) {handler.post { if(request==modelRequest){onStatus("Nieprawidłowy lub niedostępny model.");callback(false)} }}
@@ -82,6 +82,17 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
     private var frameId = 0L
     private var presented: Frame? = null
     fun lastFrame(): Frame? = presented
+    fun rigJoints(): List<String> = session?.jointNames.orEmpty()
+    fun rigMorphs(): List<String> = session?.faceNames.orEmpty()
+    fun jointAngles(): Map<String, JointAngles> = session?.displayedAngles().orEmpty()
+    fun jointPositions(): Map<String, FloatArray> = session?.positions().orEmpty()
+    fun jointTargets(): Map<String, JointAngles> = session?.requestedAngles().orEmpty()
+    fun poseJoints(values: Map<String, JointAngles>, duration: Int) {
+        checkMain()
+        session?.pose(values, duration)
+        invalidatePreview()
+    }
+    fun resetJoints() { session?.resetPose(); invalidatePreview() }
     fun invalidatePreview() { checkMain(); cancelCapture(); unschedule();nextDelay=0;schedule() }
     /** Copies this SurfaceView only. Never reads the window, gallery or camera. */
     fun capturePreview(callback: (Preview?, String?) -> Unit) {
@@ -139,7 +150,8 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
                 }
                 val settling=state.weights.indices.any { kotlin.math.abs(state.weights[it]-lastWeights[it])>.001f }
                 lastWeights=state.weights.copyOf()
-                nextDelay=LabPresentation().frameDelay(state.phase!=AvatarController.Phase.IDLE || state.animation!=null && !state.bodyPaused,settling,capture!=null)
+                nextDelay=LabPresentation().frameDelay(session?.transitioning==true || state.phase!=AvatarController.Phase.IDLE || state.animation!=null && !state.bodyPaused,settling,capture!=null)
+                if(!state.bodyPaused)nextDelay=minOf(nextDelay,65L)
                 schedule()
             } catch (e: Exception) { fail(e) } catch (e: LinkageError) { fail(e) }
         }
@@ -170,7 +182,7 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
                     val contract = GlbFaceContractReader.read(bytes)
                     handler.post {
                         if (generation == attachment && isAttachedToWindow && session === created) {
-                            try { created.load(bytes, contract); onStatus("Model gotowy · 21 morph targets · 7 animacji"); schedule() }
+                            try { created.load(bytes, contract,selectedFile==null); onStatus("Model gotowy · ${contract.names.size} ustawień twarzy · ${contract.joints.size} kości"); schedule() }
                             catch (e: Exception) { fail(e) } catch (e: LinkageError) { fail(e) }
                         }
                     }
@@ -205,7 +217,7 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
     private fun checkMain() = check(Looper.myLooper() == Looper.getMainLooper())
     companion object {
         const val ASSET_PATH = "avatar/iskra.glb"
-        const val MODEL_SHA256 = "0f1d4325bcda5504acee3cfe57b35797eb8c15f1cf5fed1cb0dd70286577b4cc"
+        const val MODEL_SHA256 = "4fbcbdcec544b293d229fbd4e3fc82d9b9e608b1265c849f5334798fccd683c7"
     }
 }
 
@@ -219,6 +231,7 @@ private class RenderSession(context: Context) : AutoCloseable {
     private lateinit var view: com.google.android.filament.View
     private lateinit var camera: Camera
     private var cameraEntity = 0
+    private var rimLight = 0
     private var light = 0
     private var sky: Skybox? = null
     private var indirect: IndirectLight? = null
@@ -231,10 +244,38 @@ private class RenderSession(context: Context) : AutoCloseable {
     private var selectedAnimation: String? = null
     private var animationIndex: Int? = null
     private val bodyPlayback = BodyPlayback()
-    private var headInstance = 0
-    private var headApplied = false
-    private val headBase = FloatArray(16)
-    private val headPose = FloatArray(16)
+    // Resting arm angles sampled from the first frame of this scan's HumanHappyIdle clip.
+    private val restingArms = mapOf(
+        "LeftShoulder" to JointAngles(8.5f,9.6f,-17.8f), "LeftArm" to JointAngles(4.3f,29f,17.7f),
+        "LeftForeArm" to JointAngles(7.4f,-1.2f,-12.1f), "LeftHand" to JointAngles(-11.2f,-10.4f,9.3f),
+        "RightShoulder" to JointAngles(1f,-9.8f,15.9f), "RightArm" to JointAngles(25.7f,-6.7f,-8.5f),
+        "RightForeArm" to JointAngles(6.8f,.4f,5.6f), "RightHand" to JointAngles(-17.3f,-.7f,-23.9f))
+    private var builtin = false
+    private var idleStarted = 0L
+    private val jointPose = JointPose()
+    private var jointInstances = emptyMap<String, Int>()
+    private val restored = linkedMapOf<Int, FloatArray>()
+    private val jointOutput = FloatArray(16)
+    private val savedBases = mutableMapOf<Int, FloatArray>()
+    val jointNames get() = jointInstances.keys.toList()
+    val faceNames get() = parsedContract?.names.orEmpty()
+    var transitioning = false
+        private set
+    private var shownAngles = emptyMap<String, JointAngles>()
+    fun displayedAngles() = shownAngles
+    fun requestedAngles() = jointPose.targets()
+    fun positions(): Map<String, FloatArray> {
+        val matrix = FloatArray(16)
+        return jointInstances.mapValues { (_, instance) ->
+            engine.transformManager.getWorldTransform(instance, matrix)
+            floatArrayOf(matrix[12],matrix[13],matrix[14])
+        }
+    }
+    fun pose(values: Map<String, JointAngles>, duration: Int) {
+        require(duration in 0..5000 && values.keys.all { it in jointInstances } && values.values.all { it.valid() })
+        jointPose.set(values, duration, System.nanoTime(), shownAngles)
+    }
+    fun resetPose() { jointPose.clear() }
     private val bindTransforms = linkedMapOf<Int, FloatArray>()
     private var lastFrame = 0L
     private var closed = false
@@ -261,12 +302,16 @@ private class RenderSession(context: Context) : AutoCloseable {
         sky = Skybox.Builder().color(0f, 0f, 0f, 1f).build(engine)
         scene.skybox = sky
         val irradiance = FloatArray(27); irradiance[0] = .8f; irradiance[1] = .8f; irradiance[2] = .8f
-        indirect = IndirectLight.Builder().irradiance(3, irradiance).intensity(25_000f).build(engine)
+        indirect = IndirectLight.Builder().irradiance(3, irradiance).intensity(20_000f).build(engine)
         scene.indirectLight = indirect
         light = EntityManager.get().create()
-        LightManager.Builder(LightManager.Type.SUN).color(1f, .96f, .91f).intensity(70_000f)
-            .direction(-.3f, -.8f, -1f).castShadows(false).build(engine, light)
+        LightManager.Builder(LightManager.Type.SUN).color(1f, .96f, .91f).intensity(66_000f)
+            .direction(-.62f, -.54f, -.78f).castShadows(false).build(engine, light)
         scene.addEntity(light)
+        rimLight = EntityManager.get().create()
+        LightManager.Builder(LightManager.Type.DIRECTIONAL).color(.76f, .86f, 1f).intensity(16_000f)
+            .direction(.6f, -.3f, .8f).castShadows(false).build(engine, rimLight)
+        scene.addEntity(rimLight)
         materials = UbershaderProvider(engine)
         loader = AssetLoader(engine, materials!!, EntityManager.get())
         ui.renderCallback = object : UiHelper.RendererCallback {
@@ -288,7 +333,7 @@ private class RenderSession(context: Context) : AutoCloseable {
         ui.attachTo(surface)
         display.attach(renderer, surface.display)
     }
-    fun load(bytes: ByteArray, parsed: GlbFaceContract) {
+    fun load(bytes: ByteArray, parsed: GlbFaceContract, isBuiltin: Boolean) {
         check(!closed)
         val buffer=ByteBuffer.allocateDirect(bytes.size).order(ByteOrder.nativeOrder()).put(bytes);buffer.flip()
         val created=checkNotNull(loader!!.createAsset(buffer)){"Nie można załadować GLB"}
@@ -306,12 +351,15 @@ private class RenderSession(context: Context) : AutoCloseable {
             for(id in (created.entities+intArrayOf(created.root)).distinct()){
                 val i=transforms.getInstance(id);if(i!=0)nextBinds[i]=transforms.getTransform(i,FloatArray(16))
             }
-            val head = created.getEntitiesByName("Head").singleOrNull()?.let { transforms.getInstance(it) } ?: 0
+            val joints = parsed.joints.mapNotNull { name ->
+                val id = created.getEntitiesByName(name).singleOrNull() ?: return@mapNotNull null
+                val joint = transforms.getInstance(id)
+                if (joint == 0) null else name to joint
+            }.toMap()
             a.updateBoneMatrices();engine.renderableManager.setMorphWeights(instance,FloatArray(parsed.names.size),0)
             created.releaseSourceData();scene.addEntities(created.entities)
             val previous=asset
-            headInstance = head
-            headApplied = false
+            builtin=isBuiltin; idleStarted=System.nanoTime(); jointInstances = joints; jointPose.clear(); shownAngles=emptyMap(); restored.clear(); savedBases.clear()
             asset=created;animator=a;morphInstance=instance;parsedContract=parsed;lastAppearance=null
             bindTransforms.clear();bindTransforms.putAll(nextBinds);selectedAnimation=null;animationIndex=null;bodyPlayback.frame(null,0f,false)
             previous?.let{scene.removeEntities(it.entities);loader!!.destroyAsset(it)}
@@ -323,11 +371,9 @@ private class RenderSession(context: Context) : AutoCloseable {
         lastFrame = now
         val body = bodyPlayback.frame(state.animation, dt, state.bodyPaused)
         val transforms = engine.transformManager
-        // Restore last frame's unmodified joint before sampling the body clip.
-        // This also handles clips that do not key the head.
-        var bonesChanged = headApplied || body.restoreBindPose
-        if (headApplied) transforms.setTransform(headInstance, headBase)
-        headApplied = false
+        var bonesChanged = restored.isNotEmpty() || body.restoreBindPose
+        for ((instance, base) in restored) transforms.setTransform(instance, base)
+        restored.clear()
         if (body.restoreBindPose) {
             for ((instance, transform) in bindTransforms) engine.transformManager.setTransform(instance, transform)
             selectedAnimation = body.animation
@@ -338,15 +384,42 @@ private class RenderSession(context: Context) : AutoCloseable {
             a.applyAnimation(i, if (duration > 0f) body.seconds % duration else 0f)
             bonesChanged = true
         } }
-        if (headInstance != 0 && state.headPitchDegrees > .01f) {
-            transforms.getTransform(headInstance, headBase)
-            pitchHead(headBase, state.headPitchDegrees, headPose)
-            transforms.setTransform(headInstance, headPose)
-            headApplied = true
+        val rotations = mutableMapOf<String,JointAngles>()
+        if (builtin && state.animation == null) rotations.putAll(restingArms)
+        // An explicit command takes precedence, including an intentional zero angle.
+        rotations.putAll(jointPose.at(now))
+        transitioning = jointPose.moving(now)
+        // Layer a slow breath and the spoken accent on top of the sampled local joint frames.
+        if (!state.bodyPaused && state.animation == null && "Spine2" in jointInstances) {
+            val breath = (.50 * sin((now % 4_600_000_000L) / 4.6e9 * 2 * Math.PI)).toFloat()
+            val spine = rotations["Spine2"] ?: JointAngles.ZERO
+            rotations["Spine2"] = spine.copy(x = (spine.x + breath).coerceIn(-180f,180f))
+        }
+        if ("Head" in jointInstances && state.headPitchDegrees > .01f) {
+            val head = rotations["Head"] ?: JointAngles.ZERO
+            rotations["Head"] = head.copy(x = (head.x + state.headPitchDegrees).coerceIn(-180f,180f))
+        }
+        shownAngles = rotations
+        for ((name, angles) in rotations) {
+            if (angles == JointAngles.ZERO) continue
+            val instance = jointInstances.getValue(name)
+            val base = savedBases.getOrPut(instance) { FloatArray(16) }
+            transforms.getTransform(instance, base)
+            rotateJoint(base, angles, jointOutput)
+            transforms.setTransform(instance, jointOutput)
+            restored[instance] = base
             bonesChanged = true
         }
         if (bonesChanged) animator?.updateBoneMatrices()
-        if (morphInstance != 0) engine.renderableManager.setMorphWeights(morphInstance, state.weights, 0)
+        if (morphInstance != 0) {
+            val weights=state.weights.copyOf(parsedContract!!.names.size)
+            if (!state.bodyPaused) {
+                val blink=naturalBlink((now-idleStarted).coerceAtLeast(0L))
+                weights[0]=maxOf(weights[0],blink)
+                weights[1]=maxOf(weights[1],blink*.97f)
+            }
+            engine.renderableManager.setMorphWeights(morphInstance,weights,0)
+        }
         val distance = (if (closeup) .74 else 3.4) / zoom
         val targetY = if (closeup) 1.70 else .95
         camera.lookAt(distance * sin(angle), targetY + (if (closeup) .02 else .04), distance * cos(angle), 0.0, targetY, 0.0, 0.0, 1.0, 0.0)
@@ -392,6 +465,7 @@ private class RenderSession(context: Context) : AutoCloseable {
         if (::scene.isInitialized) { attempt { scene.indirectLight = null }; attempt { scene.skybox = null } }
         indirect?.let { attempt { engine.destroyIndirectLight(it) } }
         sky?.let { attempt { engine.destroySkybox(it) } }
+        if (rimLight != 0) { attempt { engine.destroyEntity(rimLight) }; attempt { EntityManager.get().destroy(rimLight) } }
         if (light != 0) { attempt { engine.destroyEntity(light) }; attempt { EntityManager.get().destroy(light) } }
         if (::view.isInitialized) attempt { engine.destroyView(view) }
         if (::scene.isInitialized) attempt { engine.destroyScene(scene) }
@@ -414,5 +488,16 @@ internal fun pitchHead(base: FloatArray, degrees: Float, out: FloatArray) {
     for (row in 0..3) {
         out[4 + row] = c * base[4 + row] + s * base[8 + row]
         out[8 + row] = c * base[8 + row] - s * base[4 + row]
+    }
+}
+
+/** Alternate longer and shorter gaps, with quicker closure than reopening. */
+internal fun naturalBlink(elapsedNanos: Long): Float {
+    val ms = elapsedNanos / 1_000_000 % 9150
+    val t = if (ms >= 8630) ms-8630 else ms-3750
+    return when (t) {
+        in 0..85 -> t/85f
+        in 86..210 -> (210-t)/125f
+        else -> 0f
     }
 }

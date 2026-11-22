@@ -9,6 +9,7 @@ data class LabPresentation(
     val chatTransparency: Int = 40, val chatHeight: Int = 35,
     val speakTypedReplies: Boolean = true,
     val expressiveSpeech: Boolean = false,
+    val showChat: Boolean = true,
 ) {
     fun checked(): LabPresentation {
         require(chatTransparency in 0..100 && chatHeight in 15..65)

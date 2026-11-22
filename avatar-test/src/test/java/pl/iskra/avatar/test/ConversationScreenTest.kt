@@ -20,6 +20,28 @@ class ConversationScreenTest {
     // Exercise the production activity without opening a real microphone or GPU surface.
     private fun field(owner: Any, name: String) = owner.javaClass.getDeclaredField(name).apply { isAccessible=true }
 
+    @Test fun hiddenTextStaysHiddenOnIncomingReplyFocusAndAfterReopen() {
+        val window=Robolectric.buildActivity(AvatarTestActivity::class.java).create().start().resume()
+        val a=window.get()
+        val toggle=field(a,"chatToggle").get(a) as android.widget.Button
+        val transcript=field(a,"transcript").get(a) as ScrollView
+        toggle.performClick()
+        a.javaClass.getDeclaredMethod("bubble",String::class.java,Boolean::class.javaPrimitiveType)
+            .apply { isAccessible=true }.invoke(a,"Cała odpowiedź",false)
+        val input=field(a,"input").get(a) as EditText
+        input.onFocusChangeListener.onFocusChange(input,true)
+        assertEquals(View.GONE,transcript.visibility)
+        toggle.performClick()
+        assertEquals(View.VISIBLE,transcript.visibility)
+        val bubbles=field(a,"bubbles").get(a) as android.view.ViewGroup
+        assertEquals("Cała odpowiedź",(bubbles.getChildAt(0) as android.widget.TextView).text)
+        toggle.performClick()
+        window.pause().stop().destroy()
+        val next=Robolectric.buildActivity(AvatarTestActivity::class.java).create().start().resume()
+        try {assertEquals(View.GONE,(field(next.get(),"transcript").get(next.get()) as ScrollView).visibility)}
+        finally {next.pause().stop().destroy()}
+    }
+
     @Test fun focusingTheComposerOrOpeningTheChatDrawerKeepsThePendingRequest() {
         val window=Robolectric.buildActivity(AvatarTestActivity::class.java).create().start().resume()
         try {

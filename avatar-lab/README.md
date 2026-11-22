@@ -1,3 +1,11 @@
+# Iskra Lab 0.6.10 — ciało i widoczność rozmowy
+
+Przycisk **Ukryj tekst / Pokaż tekst** w nagłówku zapamiętuje wybór. Telefon odbiera odpowiedzi i odtwarza głos również podczas ukrycia dymków. W menu **Sterowanie → Sprawdź gest całej postaci** można uruchomić lokalną próbę. **Poza bazowa i reset mimiki** kończy gest.
+
+Wbudowany GLB ma 52 nazwane stawy i 25 ustawień twarzy. Jego atlas reguluje połysk skóry, włosów i stroju. Importowane modele z wcześniejszymi 21 ustawieniami pozostają obsługiwane. Instalator odtwarza model z poprzedniego APK.
+
+Telefon zgłasza na potrzeby bramki zdolność `joints/v1`. Polecenie `RIG` czyta stawy dostępne na aktywnym modelu, ich położenie w scenie i bieżące odchylenia. `POSE` przyjmuje częściowe zmiany mimiki i obroty stawów XYZ w stopniach oraz czas przejścia stawów. Ruchy nakładają się na klip i sygnał głosu. Obsługa tych dwóch poleceń wymaga odpowiedniej wersji bramki.
+
 # Iskra Lab 0.6.9 — kolejne wypowiedzi
 
 Rozmowa głosowa pokazuje w czacie rozpoznane słowa i odpowiedzi Iskry. Podczas oczekiwania można pisać następną wiadomość, otworzyć menu i poruszać kamerą. Przycisk **Przerwij odpowiedź** kończy oczekiwanie. Po odtworzeniu głosu mikrofon wraca do zwykłego nasłuchu. Rozpoczęta wypowiedź użytkownika może dokończyć rozpoznawanie.

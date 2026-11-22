@@ -6,7 +6,7 @@ import org.junit.Test
 
 class AvatarCommandProtocolTest {
     @Test fun validCommandsCoverEveryExistingControl() {
-        for (name in AvatarController.MORPHS) assertTrue(AvatarCommandProtocol.valid(JSONObject("""{"action":"SET","weights":{"$name":0.5}}""")))
+        for (name in GlbFaceContractReader.EXPECTED) assertTrue(AvatarCommandProtocol.valid(JSONObject("""{"action":"SET","weights":{"$name":0.5}}""")))
         for (name in AvatarController.ANIMATIONS) assertTrue(AvatarCommandProtocol.valid(JSONObject("""{"action":"SET","animation":"$name"}""")))
         assertTrue(AvatarCommandProtocol.valid(JSONObject("""{"action":"SET","animation":null,"body_paused":true,"camera":{"face":false,"angle":1.2}}""")))
         assertTrue(AvatarCommandProtocol.valid(JSONObject("""{"action":"STATE","preview":false}""")))

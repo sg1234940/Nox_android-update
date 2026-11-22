@@ -8,8 +8,9 @@ import tempfile
 import zipfile
 
 from cheek_rig import SOURCE_SHA, add_cheeks
+from lifelike_rig import SOURCE as CHEEK_SHA, extend
 
-SHA256 = '0f1d4325bcda5504acee3cfe57b35797eb8c15f1cf5fed1cb0dd70286577b4cc'
+SHA256 = '4fbcbdcec544b293d229fbd4e3fc82d9b9e608b1265c849f5334798fccd683c7'
 
 def install(apk, destination):
     destination = Path(destination)
@@ -18,7 +19,7 @@ def install(apk, destination):
         existing = hashlib.sha256(data).hexdigest()
         if existing == SHA256:
             return 'already installed'
-        if existing != SOURCE_SHA:
+        if existing not in (SOURCE_SHA, CHEEK_SHA):
             raise ValueError('Destination contains a different model; move it before installation.')
     else:
         with zipfile.ZipFile(apk) as archive:
@@ -28,6 +29,8 @@ def install(apk, destination):
             data = archive.read(info)
     if hashlib.sha256(data).hexdigest() == SOURCE_SHA:
         data = add_cheeks(data)
+    if hashlib.sha256(data).hexdigest() == CHEEK_SHA:
+        data = extend(data)
     if hashlib.sha256(data).hexdigest() != SHA256:
         raise ValueError('Unexpected avatar model')
     destination.parent.mkdir(parents=True, exist_ok=True)

@@ -73,7 +73,16 @@ class AvatarLabControls(private val activity: Activity, private val avatar: Avat
             applying = true
             try {
                 when (args.getString("action")) {
-                    "RESET" -> send(AvatarController.Command.Reset)
+                    "RESET" -> { avatar.resetJoints(); send(AvatarController.Command.Reset) }
+                    "POSE" -> {
+                        val values = Protocol.joints(args)
+                        val face = args.optJSONObject("face")
+                        if (values.keys.any { it !in avatar.rigJoints() } || face?.keys()?.asSequence()?.any { it !in avatar.rigMorphs() } == true) {
+                            finish(Execution(Protocol.failure("INVALID_ARGUMENTS"))); return@post
+                        }
+                        if (values.isNotEmpty()) avatar.poseJoints(values,args.optInt("duration_ms",350))
+                        face?.keys()?.forEach { send(AvatarController.Command.Weight(it,face.getDouble(it).toFloat())) }
+                    }
                     "SET" -> {
                         args.optJSONObject("weights")?.let { w -> w.keys().forEach { send(AvatarController.Command.Weight(it, w.getDouble(it).toFloat())) } }
                         if (args.has("animation")) send(AvatarController.Command.Animation(if (args.isNull("animation")) null else args.getString("animation")))
@@ -84,9 +93,20 @@ class AvatarLabControls(private val activity: Activity, private val avatar: Avat
             } finally { applying = false }
             refresh()
             val (angle, face) = camera()
-            val base = JSONObject().put("operation", "AVATAR").put("ok", true).put("state", if (args.getString("action") == "STATE") "READ" else "APPLIED")
-                .put("executed", args.getString("action") != "STATE").put("requested", Protocol.pose(avatar.controller.snapshot(), angle, face))
+            val readOnly = args.getString("action") in setOf("STATE","RIG")
+            val base = JSONObject().put("operation", "AVATAR").put("ok", true).put("state", if (readOnly) "READ" else "APPLIED")
+                .put("executed", !readOnly).put("requested", Protocol.pose(avatar.controller.snapshot(), angle, face))
                 .put("frame", JSONObject.NULL).put("preview", JSONObject.NULL).put("preview_error", JSONObject.NULL)
+            if (args.getString("action") in setOf("RIG","POSE")) {
+                fun angles(values: Map<String,pl.iskra.avatar.JointAngles>) = JSONObject().apply {
+                    for ((name,v) in values) put(name,org.json.JSONArray(listOf(v.x.toDouble(),v.y.toDouble(),v.z.toDouble())))
+                }
+                val weights=avatar.controller.snapshot().weights
+                val facial=JSONObject().apply { for(name in avatar.rigMorphs())put(name,weights[AvatarController.MORPHS.indexOf(name)].toDouble()) }
+                base.put("rig",JSONObject().put("joints",org.json.JSONArray(avatar.rigJoints()))
+                    .put("positions",JSONObject().apply { for ((name,v) in avatar.jointPositions())put(name,org.json.JSONArray(v.map { it.toDouble() })) })
+                    .put("face",facial).put("offsets",angles(avatar.jointAngles())).put("targets",angles(avatar.jointTargets())))
+            }
             if (!args.optBoolean("preview", true)) { finish(Execution(base)); return@post }
             handler.postDelayed({
                 if (abandoned.get() || !current()) { finish(Execution(base.put("preview_error", "STALE"))); return@postDelayed }

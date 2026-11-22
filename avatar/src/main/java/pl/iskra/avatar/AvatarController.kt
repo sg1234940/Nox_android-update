@@ -25,7 +25,8 @@ class AvatarController {
     companion object {
         val MORPHS = listOf("eyeBlinkLeft", "eyeBlinkRight", "eyesLeft", "eyesRight", "eyesUp", "eyesDown",
             "browInnerUp", "browDownLeft", "browDownRight", "jawOpen", "mouthSmile", "mouthFrown",
-            "mouthFunnel", "mouthPucker", "viseme_MBP", "viseme_FV", "viseme_A", "viseme_E", "viseme_I", "viseme_O", "viseme_U")
+            "mouthFunnel", "mouthPucker", "viseme_MBP", "viseme_FV", "viseme_A", "viseme_E", "viseme_I", "viseme_O", "viseme_U",
+            "cheekRaiseLeft", "cheekRaiseRight", "foreheadLiftLeft", "foreheadLiftRight")
         val ANIMATIONS = listOf("HumanDancingTwerk", "HumanForwardJump", "HumanHappyIdle", "HumanHipHopDancing2",
             "HumanJoyfulJump", "HumanOffensiveIdle", "HumanSitting3")
         val OPENING_GAINS = mapOf("jawOpen" to 1f, "mouthFunnel" to .35f, "viseme_A" to .85f,
@@ -126,6 +127,12 @@ class AvatarController {
             val browRoom = (1f - rendered[INNER_BROW]) *
                 (1f - maxOf(rendered[LEFT_BROW_DOWN], rendered[RIGHT_BROW_DOWN]))
             rendered[INNER_BROW] += browRoom * (.15f * phrase + .44f * accent)
+            for (side in listOf("Left","Right")) {
+                val cheek = MORPHS.indexOf("cheekRaise"+side)
+                val forehead = MORPHS.indexOf("foreheadLift"+side)
+                rendered[cheek] += (1f-rendered[cheek])*(.12f*phrase+.22f*rendered[MORPHS.indexOf("mouthSmile")])
+                rendered[forehead] += (1f-rendered[forehead])*.36f*rendered[INNER_BROW]
+            }
             if (!bodyPaused) pitch = 1.1f * phrase + 4.2f * accent
         }
         return Snapshot(phase, animation, rendered, playback, position, bodyPaused, pitch)

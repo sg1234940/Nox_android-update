@@ -36,7 +36,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
  private lateinit var preferences:LabPreferences
  private var profile=LabPresentation();private var voices=listOf<LabVoice.Voice>();private var ears=listOf<String>()
  private var voice:LabVoice?=null;private var foreground=false;private var handsFree=false
- private var listening=false;private var talking=false;private var drawerOpen=false;private var textMode=false
+ private var listening=false;private var talking=false;private var drawerOpen=false;private lateinit var chatToggle: Button
  private var turn=0L;private var sequence=0L;private var playback:String?=null
  private lateinit var cancelReply: Button
  private var testingMic=false;private var resumedTurn=false;private var pendingImport="avatar";private var pendingMicPermission=0;private var grantedMicRequest=0
@@ -65,7 +65,9 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   root.addView(overlay,FrameLayout.LayoutParams(-1,-1))
   header=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL}
   header.addView(button("☰"){openDrawer()},LinearLayout.LayoutParams(dp(60),dp(52)))
-  header.addView(label("Iskra Lab 0.6.9",18f),LinearLayout.LayoutParams(0,dp(56),1f))
+  header.addView(label("Iskra Lab 0.6.10",18f),LinearLayout.LayoutParams(0,dp(56),1f))
+  chatToggle=button(""){toggleChat()}
+  header.addView(chatToggle,LinearLayout.LayoutParams(-2,dp(48)))
   header.addView(button("⚙"){settings()},LinearLayout.LayoutParams(dp(60),dp(52)))
   overlay.addView(header);overlay.addView(View(this),LinearLayout.LayoutParams(-1,0,1f))
   notice=label("",12f).apply {visibility=View.GONE;setPadding(dp(12),dp(4),dp(12),0);accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE}
@@ -95,7 +97,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
    refreshAction()
   };override fun afterTextChanged(s:Editable?){} })
   avatar.onStatus={message->if(message.startsWith("Model gotowy")){sayStatus("");if(!initializedAppearance){initializedAppearance=true;applyProfileModel();applyBackground()}}else sayStatus(message)}
-  installGestures();applyCamera();avatar.setAppearance(profile.hologram,profile.brightness);refreshAction();buildDrawer()
+  showTranscript();installGestures();applyCamera();avatar.setAppearance(profile.hologram,profile.brightness);refreshAction();buildDrawer()
   root.setOnApplyWindowInsetsListener {v,insets->v.setPadding(0,insets.systemWindowInsetTop,0,insets.systemWindowInsetBottom);insets}
   root.addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->layoutControls();layoutChat()}
   footer.addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->layoutChat()}
@@ -145,9 +147,16 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   try { requireNotNull(voice).speak(text,voiceId,tempo,phrases) }
   catch(_:Exception){ playingReply=false;handsFree=false;refreshAction();showTranscript();sayStatus("Nie udało się uruchomić wybranego głosu Piper.") }
  }
- private fun showTranscript(){textMode=true;transcript.visibility=View.VISIBLE}
+ private fun showTranscript(){
+  transcript.visibility=if(profile.showChat && controlsPanel==null)View.VISIBLE else View.GONE
+  chatToggle.text=if(profile.showChat)"Ukryj tekst" else "Pokaż tekst"
+ }
+ private fun toggleChat(){
+  profile=profile.copy(showChat=!profile.showChat);showTranscript();save()
+  if(profile.showChat)transcript.post{transcript.fullScroll(View.FOCUS_DOWN)}
+ }
  private fun bubble(text:String,user:Boolean){showTranscript();val view=label(text,16f).apply{background=chatPanel()};bubbles.addView(view,LinearLayout.LayoutParams(-1,-2).apply{setMargins(if(user)dp(36) else 0,dp(5),if(user)0 else dp(36),dp(5))});while(bubbles.childCount>100)bubbles.removeViewAt(0);transcript.post{transcript.fullScroll(View.FOCUS_DOWN)}}
- private fun sendTyped(){val text=input.text.toString().trim();if(text.isEmpty() || lab.busy)return;interrupt();textMode=true;transcript.visibility=View.VISIBLE;input.setText("");submit(text)}
+ private fun sendTyped(){val text=input.text.toString().trim();if(text.isEmpty() || lab.busy)return;interrupt();showTranscript();input.setText("");submit(text)}
  private fun submit(text:String){
   if(!foreground || text.length>8000){sayStatus("Wypowiedź musi mieć najwyżej 8000 znaków.");return}
   if(lab.busy)lab.cancel()
@@ -207,7 +216,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   drawer.addView(button("Cała postać"){closeDrawer();profile=profile.copy(face=false);applyCamera();save()})
   drawer.addView(button("Twarz"){closeDrawer();profile=profile.copy(face=true);applyCamera();save()})
   drawer.addView(button("Przywróć kamerę"){closeDrawer();profile=profile.copy(face=false,angle=0f,zoom=1f);applyCamera();save()})
-  drawer.addView(label("Panel"));drawer.addView(button("Rozmowa"){closeDrawer();textMode=true;transcript.visibility=View.VISIBLE})
+  drawer.addView(label("Panel"));drawer.addView(button("Rozmowa"){closeDrawer();if(!profile.showChat)toggleChat() else showTranscript()})
   drawer.addView(button("Sterowanie"){closeDrawer();manualControls()});drawer.addView(button("Podgląd dla Iskry"){closeDrawer();preview()})
   drawer.addView(label("Wygląd"));drawer.addView(button("Awatar"){closeDrawer();chooseModel(false)});drawer.addView(button("Ubiór"){closeDrawer();chooseModel(true)})
   drawer.addView(button(if(profile.hologram)"Styl: holograficzny" else "Styl: zwykły"){closeDrawer();interrupt();profile=profile.copy(hologram=!profile.hologram);avatar.setAppearance(profile.hologram,profile.brightness);save();buildDrawer()})
@@ -319,7 +328,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   val panel=controlsPanel ?: return
   controlsPanel=null;root.removeView(panel)
   avatar.layoutParams=FrameLayout.LayoutParams(-1,-1)
-  footer.visibility=View.VISIBLE;transcript.visibility=if(textMode)View.VISIBLE else View.GONE
+  footer.visibility=View.VISIBLE;showTranscript()
   avatar.invalidatePreview()
  }
  private fun manualControls(){
@@ -343,8 +352,19 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   val pause=button(if(avatar.controller.snapshot().bodyPaused)"Wznów ciało" else "Zamroź ciało"){}
   pause.setOnClickListener {interrupt();val next=!avatar.controller.snapshot().bodyPaused;emit(AvatarController.Command.BodyPaused(next));pause.text=if(next)"Wznów ciało" else "Zamroź ciało"}
   c.addView(pause)
-  c.addView(button("Poza bazowa i reset mimiki"){interrupt();emit(AvatarController.Command.Reset);bars.forEach{it.progress=0};animations.setSelection(0);pause.text="Zamroź ciało"})
-  AvatarController.MORPHS.forEachIndexed {index,name->
+  c.addView(button("Sprawdź gest całej postaci"){
+   val sample=mapOf("Head" to JointAngles(4f,14f,-3f),"Spine2" to JointAngles(0f,5f,0f),
+    "RightArm" to JointAngles(32f,-8f,-10f),"RightForeArm" to JointAngles(48f,0f,3f),
+    "RightHand" to JointAngles(-12f,8f,5f),"RightHandIndex1" to JointAngles(12f,0f,0f))
+   val available=sample.filterKeys { it in avatar.rigJoints() }
+   if(available.isEmpty()){sayStatus("Model nie udostępnił jeszcze kości.");return@button}
+   avatar.poseJoints(available,800)
+   if("cheekRaiseLeft" in avatar.rigMorphs())emit(AvatarController.Command.Weight("cheekRaiseLeft",.45f))
+   closeControls();sayStatus("Gest próbny · powrót przez „Poza bazowa i reset mimiki”")
+  })
+  c.addView(button("Poza bazowa i reset mimiki"){interrupt();avatar.resetJoints();emit(AvatarController.Command.Reset);bars.forEach{it.progress=0};animations.setSelection(0);pause.text="Zamroź ciało"})
+  avatar.rigMorphs().forEach {name->
+   val index=AvatarController.MORPHS.indexOf(name)
    val title=label(name,14f);c.addView(title)
    val bar=SeekBar(this).apply {max=100;progress=(avatar.controller.snapshot().weights[index]*100).roundToInt().coerceIn(0,100);contentDescription=name}
    title.text="$name · ${bar.progress}%"
