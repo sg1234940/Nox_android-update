@@ -114,6 +114,24 @@ class AvatarControllerTest {
         assertEquals(AvatarController.Result.INVALID, c.send(2, AvatarController.Command.SpeechFrame("p", 20, 1f, "unknown")))
         assertEquals(.45f, c.snapshot().weights[9], 0f)
     }
+    @Test fun commandedMouthPoseSurvivesCompletionAndARealUtterance() {
+        val c = fresh()
+        c.send(0, AvatarController.Command.Weight("jawOpen", .2f))
+        c.send(1, AvatarController.Command.Weight("mouthSmile", .6f))
+        c.send(2, AvatarController.Command.PhaseChanged(AvatarController.Phase.IDLE))
+        val jaw = AvatarController.MORPHS.indexOf("jawOpen")
+        val smile = AvatarController.MORPHS.indexOf("mouthSmile")
+        assertEquals(.2f, c.snapshot().weights[jaw], 0f)
+        c.send(3, started)
+        c.send(4, AvatarController.Command.SpeechFrame("p", 12, 1f))
+        assertTrue(c.frame(.1f).weights[jaw] > .2f)
+        c.send(5, AvatarController.Command.SpeechStopped("p"))
+        assertEquals(.2f, c.frame(.1f).weights[jaw], 0f)
+        assertEquals(.6f, c.snapshot().weights[smile], 0f)
+        c.send(6, AvatarController.Command.Reset)
+        assertClosed(c)
+    }
+
     @Test fun resetClearsAllMorphs() {
         val c = fresh(); c.send(0, AvatarController.Command.Weight("mouthSmile", 1f))
         c.send(1, AvatarController.Command.Reset); assertTrue(c.frame(.1f).weights.all { it == 0f })

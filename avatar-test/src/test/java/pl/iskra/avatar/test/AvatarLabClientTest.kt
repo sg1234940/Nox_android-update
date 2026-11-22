@@ -6,6 +6,9 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.tls.HandshakeCertificates
 import okhttp3.tls.HeldCertificate
 import org.json.JSONObject
+import pl.iskra.avatar.AvatarController
+import pl.iskra.avatar.LabPresentation
+import pl.iskra.avatar.LabVoice
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -31,6 +34,40 @@ class AvatarLabClientTest {
             .put("server_continuations_complete",true).put("text","Gotowe")
         return start.toString()+"\n"+JSONObject().put("type","done").put("finish_reason","stop").put("finality_protocol","promyk.final/v1").put("final_response",f).toString()
     }
+    @Test fun typedTurnMovesFaceThenSpeaksOnlyTheCompletedReply() = fixture { server, client ->
+        val voice = LabVoice.Voice("local-" + "a".repeat(32), "Żeński", "pl")
+        val profile = LabPresentation(voiceId = voice.id)
+        val turn = requireNotNull(LabReplyVoice.forTurn(profile, listOf(voice), handsFree = false))
+        val face = AvatarController().apply { bindConversation("c"); beginTurn(1) }
+        server.enqueue(advertised())
+        server.enqueue(MockResponse().setBody(request() + "\n"))
+        server.enqueue(MockResponse().setBody(final() + "\n"))
+        val answer = client.run(server.url("/").toString(), "c", 1, "Powiedz coś i uśmiechnij się", { true }, {}, { command ->
+            assertNull(client.finalResponse)
+            val smile = command.getJSONObject("arguments").getJSONObject("weights").getDouble("mouthSmile").toFloat()
+            face.dispatch(AvatarController.Event("c", 1, 0, AvatarController.Command.Weight("mouthSmile", smile)))
+            JSONObject().put("ok", true)
+        }, turn.context())
+        server.takeRequest()
+        repeat(2) {
+            val body = JSONObject(server.takeRequest().body.readUtf8())
+            assertTrue(body.getJSONObject("voice_context").getBoolean("synthesis_enabled"))
+            assertTrue(body.getJSONObject("device_capabilities").getJSONObject("avatar").getBoolean("enabled"))
+        }
+        assertEquals(.3f, face.snapshot().weights[AvatarController.MORPHS.indexOf("mouthSmile")], .0001f)
+        assertEquals(voice.id, turn.speech(answer, client.finalResponse)?.voiceId)
+    }
+    @Test fun pendingPhoneReceiptCannotAuthorizeSpeech() = fixture { server, client ->
+        val lines = final().lines()
+        val done = JSONObject(lines.last()).put("continuation_receipt", receipt)
+        server.enqueue(advertised())
+        server.enqueue(MockResponse().setBody(lines.first() + "\n" + done + "\n"))
+        assertThrows(IllegalStateException::class.java) {
+            client.run(server.url("/").toString(), "c", 1, "x", { true }, {}, { JSONObject() })
+        }
+        assertNull(client.finalResponse)
+    }
+
     @Test fun passwordIsOnlyInHeadersOfEveryPostIncludingContinuation() = fixture(" Zażółć: gęślą ") { server, client ->
         server.enqueue(advertised()); server.enqueue(MockResponse().setBody(request() + "\n")); server.enqueue(MockResponse().setBody(final() + "\n"))
         client.run(server.url("/").toString(), "c", 1, "uśmiech", { true }, {}, { JSONObject().put("ok", true) })

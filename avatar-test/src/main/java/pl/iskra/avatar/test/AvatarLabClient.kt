@@ -74,6 +74,7 @@ class AvatarLabClient internal constructor(client: OkHttpClient? = null, private
             }
             val avatar = terminal.optJSONObject("avatar_request")
             if (avatar == null) {
+                check(terminal.isNull("continuation_receipt")) { "Odpowiedź czeka jeszcze na wynik telefonu." }
                 val final = finality.final(terminal)
                 finalResponse=final
                 return final.getString("text")

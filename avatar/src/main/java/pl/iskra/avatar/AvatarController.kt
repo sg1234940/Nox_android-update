@@ -41,6 +41,7 @@ class AvatarController {
     private var playback: String? = null
     private var position: Long? = null
     private var target = FloatArray(MORPHS.size)
+    private val pose = FloatArray(MORPHS.size)
     private var current = FloatArray(MORPHS.size)
 
     @Synchronized fun bindConversation(id: String) {
@@ -70,15 +71,22 @@ class AvatarController {
         }
         when (c) {
             is Command.PhaseChanged -> { if (c.phase != Phase.SPEAKING) clearSpeech(); phase = c.phase }
-            is Command.Weight -> target[MORPHS.indexOf(c.name)] = c.value
+            is Command.Weight -> {
+                val index = MORPHS.indexOf(c.name)
+                pose[index] = c.value
+                target[index] = c.value
+            }
             is Command.Animation -> { animation = c.name; bodyPaused = false }
             is Command.BodyPaused -> bodyPaused = c.paused
             is Command.SpeechStarted -> { clearSpeech(); playback = c.playbackId; phase = Phase.SPEAKING }
             is Command.SpeechFrame -> {
                 position = c.positionMs
-                VISEMES.forEach { target[MORPHS.indexOf(it)] = 0f }
-                c.viseme?.let { target[MORPHS.indexOf(it)] = c.energy }
-                target[MORPHS.indexOf("jawOpen")] = c.energy * .45f
+                for (name in VISEMES) {
+                    val index = MORPHS.indexOf(name)
+                    target[index] = maxOf(pose[index], if (name == c.viseme) c.energy else 0f)
+                }
+                val jaw = MORPHS.indexOf("jawOpen")
+                target[jaw] = maxOf(pose[jaw], c.energy * .45f)
             }
             is Command.SpeechStopped, Command.Interrupted -> { clearSpeech(); phase = Phase.IDLE }
             Command.Reset -> reset()
@@ -99,12 +107,13 @@ class AvatarController {
     }
     @Synchronized fun snapshot() = Snapshot(phase, animation, target.copyOf(), playback, position, bodyPaused)
     private fun clearSpeech() {
+        if (playback == null) return
         playback = null; position = null
         for (name in VISEMES + "jawOpen") {
-            val i = MORPHS.indexOf(name); target[i] = 0f; current[i] = 0f
+            val i = MORPHS.indexOf(name); target[i] = pose[i]; current[i] = pose[i]
         }
     }
     private fun reset() {
-        target.fill(0f); current.fill(0f); clearSpeech(); phase = Phase.IDLE; animation = null; bodyPaused = false
+        pose.fill(0f); target.fill(0f); current.fill(0f); clearSpeech(); phase = Phase.IDLE; animation = null; bodyPaused = false
     }
 }

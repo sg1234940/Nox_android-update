@@ -7,6 +7,7 @@ data class LabPresentation(
     val background: String = "black", val inputLanguage: String = "pl", val outputLanguage: String = "pl",
     val voiceId: String = "", val lengthScale: Float = 1f, val silenceMs: Int = 1200,
     val chatTransparency: Int = 40, val chatHeight: Int = 35,
+    val speakTypedReplies: Boolean = true,
 ) {
     fun checked(): LabPresentation {
         require(chatTransparency in 0..100 && chatHeight in 15..65)
