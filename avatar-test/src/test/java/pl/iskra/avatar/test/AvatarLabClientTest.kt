@@ -34,6 +34,30 @@ class AvatarLabClientTest {
             .put("server_continuations_complete",true).put("text","Gotowe")
         return start.toString()+"\n"+JSONObject().put("type","done").put("finish_reason","stop").put("finality_protocol","promyk.final/v1").put("final_response",f).toString()
     }
+    @Test fun secondHiddenTurnSpeaksTheFinalPublicQuestionWithItsAnswer() = fixture { server, client ->
+        val voice = LabVoice.Voice("local-" + "a".repeat(32), "Test", "pl")
+        val profile = LabPresentation(voiceId = voice.id)
+        val question = "Który gest wybierasz?"
+        val block = "<<<ISKRA_QUESTION>>>" + JSONObject().put("text", question) + "<<<END_ISKRA_QUESTION>>>"
+        for (number in 1..2) {
+            val turn = requireNotNull(LabReplyVoice.forTurn(profile.copy(showChat = number == 1), listOf(voice), false))
+            val (start, done) = final().lines()
+            val end = JSONObject(done)
+            val proof = end.getJSONObject("final_response")
+            proof.put("text", if (number == 1) "Pierwsza." else "Mam pomysł. " + block)
+            val events = mutableListOf(start)
+            if (number == 2) events += JSONObject().put("type","question").put("text", question).toString()
+            events += end.toString()
+            server.enqueue(advertised())
+            server.enqueue(MockResponse().setBody(events.joinToString("\n", postfix="\n")))
+            val answer = client.run(server.url("/").toString(), "c", number.toLong(), "Pytanie", { true }, {}, { error("Unexpected tool") }, turn.context())
+            assertEquals(if (number == 1) "Pierwsza." else "Mam pomysł. " + question, answer)
+            assertEquals(voice.id, turn.speech(answer, client.finalResponse)?.voiceId)
+            server.takeRequest()
+            assertTrue(JSONObject(server.takeRequest().body.readUtf8()).getJSONObject("voice_context").getBoolean("synthesis_enabled"))
+        }
+    }
+
     @Test fun typedTurnMovesFaceThenSpeaksOnlyTheCompletedReply() = fixture { server, client ->
         val voice = LabVoice.Voice("local-" + "a".repeat(32), "Żeński", "pl")
         val profile = LabPresentation(voiceId = voice.id)

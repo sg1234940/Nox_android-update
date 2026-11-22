@@ -65,7 +65,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   root.addView(overlay,FrameLayout.LayoutParams(-1,-1))
   header=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL}
   header.addView(button("☰"){openDrawer()},LinearLayout.LayoutParams(dp(60),dp(52)))
-  header.addView(label("Iskra Lab 0.6.10",18f),LinearLayout.LayoutParams(0,dp(56),1f))
+  header.addView(label("Iskra Lab 0.6.11",18f),LinearLayout.LayoutParams(0,dp(56),1f))
   chatToggle=button(""){toggleChat()}
   header.addView(chatToggle,LinearLayout.LayoutParams(-2,dp(48)))
   header.addView(button("⚙"){settings()},LinearLayout.LayoutParams(dp(60),dp(52)))
@@ -152,10 +152,15 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   chatToggle.text=if(profile.showChat)"Ukryj tekst" else "Pokaż tekst"
  }
  private fun toggleChat(){
-  profile=profile.copy(showChat=!profile.showChat);showTranscript();save()
-  if(profile.showChat)transcript.post{transcript.fullScroll(View.FOCUS_DOWN)}
+  profile=profile.copy(showChat=!profile.showChat)
+  preferences.writeChatVisibility(profile.showChat)
+  showTranscript()
+  scrollTranscript()
  }
- private fun bubble(text:String,user:Boolean){showTranscript();val view=label(text,16f).apply{background=chatPanel()};bubbles.addView(view,LinearLayout.LayoutParams(-1,-2).apply{setMargins(if(user)dp(36) else 0,dp(5),if(user)0 else dp(36),dp(5))});while(bubbles.childCount>100)bubbles.removeViewAt(0);transcript.post{transcript.fullScroll(View.FOCUS_DOWN)}}
+ private fun scrollTranscript(){
+  if(transcript.visibility==View.VISIBLE)transcript.post{if(transcript.visibility==View.VISIBLE)transcript.scrollTo(0,bubbles.height)}
+ }
+ private fun bubble(text:String,user:Boolean){showTranscript();val view=label(text,16f).apply{background=chatPanel()};bubbles.addView(view,LinearLayout.LayoutParams(-1,-2).apply{setMargins(if(user)dp(36) else 0,dp(5),if(user)0 else dp(36),dp(5))});while(bubbles.childCount>100)bubbles.removeViewAt(0);scrollTranscript()}
  private fun sendTyped(){val text=input.text.toString().trim();if(text.isEmpty() || lab.busy)return;interrupt();showTranscript();input.setText("");submit(text)}
  private fun submit(text:String){
   if(!foreground || text.length>8000){sayStatus("Wypowiedź musi mieć najwyżej 8000 znaków.");return}
@@ -166,22 +171,35 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   val wantsVoice=handsFree || profile.speakTypedReplies
   val replyVoice=LabReplyVoice.forTurn(profile,voices,handsFree)
   lab.submit(base,password,text,replyVoice?.context(),onText={},onComplete={answer,proof,phrasesSupported->
-   emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.IDLE));bubble(answer,false)
-   val speech=replyVoice?.speech(answer,proof,phrasesSupported)
-   if(speech!=null) {
-    playSpeech(answer,speech.voiceId,speech.tempo,speech.phrases)
-   } else if(wantsVoice) {
-    handsFree=false;showTranscript()
-    sayStatus(when {
-     voice==null -> "Ten wariant aplikacji nie zawiera modułu głosu."
-     replyVoice==null -> "Aby usłyszeć odpowiedź, wybierz lub zaimportuj głos Piper w ustawieniach „Głos i język”."
-     else -> "Tę odpowiedź można odczytać w czacie. Jej treść lub parametry wykraczają poza obsługiwany zakres mowy."
-    })
-   } else sayStatus("Gotowe")
-   refreshAction()
+   completeReply(answer,proof,phrasesSupported,replyVoice,wantsVoice)
   },onError={handsFree=false;showTranscript();emit(AvatarController.Command.Interrupted);sayStatus(it);refreshAction()})
   refreshAction()
   emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.THINKING))
+ }
+ private fun completeReply(answer:String,proof:JSONObject?,phrasesSupported:Boolean,replyVoice:LabReplyVoice?,wantsVoice:Boolean){
+  emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.IDLE))
+  if(answer.isNotBlank())bubble(answer,false)
+  val speech=replyVoice?.speech(answer,proof,phrasesSupported)
+  if(speech!=null){
+   playSpeech(answer,speech.voiceId,speech.tempo,speech.phrases)
+  }else if(answer.isBlank() && wantsVoice && voice!=null && replyVoice!=null &&
+           proof?.optString("schema")=="promyk.final/v1" && proof.opt("text")==answer && proof.isNull("voice_plan_candidate")){
+   val message="Iskra nie przesłała tekstu odpowiedzi."
+   sayStatus(message)
+   playSpeech("Komunikat aplikacji. $message",replyVoice.selected.id,replyVoice.tempo)
+  }else{
+   val message=when{
+    answer.isBlank() -> "Iskra zakończyła odpowiedź bez tekstu do odczytania."
+    !wantsVoice -> "Gotowe"
+    voice==null -> "Ten wariant aplikacji nie zawiera modułu głosu."
+    replyVoice==null -> "Aby usłyszeć odpowiedź, wybierz lub zaimportuj głos Piper w ustawieniach „Głos i język”."
+    else -> "Ta odpowiedź wykracza poza obsługiwany zakres mowy. Możesz ją przeczytać w czacie."
+   }
+   sayStatus(message)
+   if(handsFree && replyVoice!=null && voice!=null)voice?.listen(voiceSettingsValue())
+   else handsFree=false
+  }
+  refreshAction()
  }
  override fun state(value:LabVoice.State,message:String){if(!foreground)return
   when(value){LabVoice.State.LISTENING->{listening=true;if(!talking)emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.LISTENING))}
@@ -196,7 +214,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
    else->Unit}
   notice.setTextColor(when(value){LabVoice.State.LISTENING->0xff24d2ed.toInt();LabVoice.State.SPEAKING->0xff57e2a1.toInt();LabVoice.State.RECOGNIZING,LabVoice.State.SYNTHESIZING->0xffffd468.toInt();else->0xffe4edf6.toInt()})
   if(message.isNotBlank())sayStatus(message)
-  else if(value==LabVoice.State.IDLE && !talking && !lab.busy){handsFree=false;sayStatus("Nie wykryto mowy. Dotknij mikrofonu, aby mówić.")}
+  else if(value==LabVoice.State.IDLE && !playingReply && !talking && !lab.busy){handsFree=false;sayStatus("Nie wykryto mowy. Dotknij mikrofonu, aby mówić.")}
   refreshAction()
  }
  override fun transcript(text:String){
@@ -388,7 +406,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
  }
  private fun selectProfile(next:LabPresentation){try{next.checked()}catch(_:Exception){sayStatus("Nieprawidłowy zapis wyglądu.");return};interrupt();val id=next.outfit.ifEmpty{next.model};val file=if(id=="builtin")null else modelFile(id)
   if(file!=null&&!file.isFile){sayStatus("Plik modelu nie jest już dostępny. Zachowano poprzedni.");return}
-  avatar.loadModel(file){ok->if(ok){profile=next;emit(AvatarController.Command.Reset);applyCamera();avatar.setAppearance(profile.hologram,profile.brightness);save();buildDrawer()}}
+  avatar.loadModel(file){ok->if(ok){profile=profile.copy(model=next.model,outfit=next.outfit);emit(AvatarController.Command.Reset);applyCamera();avatar.setAppearance(profile.hologram,profile.brightness);save();buildDrawer()}}
  }
  private fun applyProfileModel(){val id=profile.outfit.ifEmpty{profile.model};if(id!="builtin")selectProfile(profile)}
  private fun backgroundSettings(){interrupt();AlertDialog.Builder(this).setTitle("Tło").setItems(arrayOf("Czarne","Spokojna scena","Własne zdjęcie…")){_,i->when(i){0->{profile=profile.copy(background="black");applyBackground();save()};1->{profile=profile.copy(background="scene");applyBackground();save()};else->{sayStatus("Wybrane zdjęcie będzie widoczne w podglądach przekazywanych Iskrze.");startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE),83)}}}.show()}

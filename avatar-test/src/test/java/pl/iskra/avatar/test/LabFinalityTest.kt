@@ -12,5 +12,18 @@ class LabFinalityTest {
  @Test fun textOrDoneAloneCannotAuthorizeCompletion(){assertThrows(IllegalArgumentException::class.java){LabFinality().final(done())}}
  @Test fun foreignResponseAndIncompleteServerWorkAreRejected(){for(patch in listOf("response_id" to "other","server_continuations_complete" to false)){val f=LabFinality();f.accept(start());val d=done();d.getJSONObject("final_response").put(patch.first,patch.second);assertThrows(IllegalArgumentException::class.java){f.final(d)}}}
  @Test fun errorAndSkippedRoundInvalidateFinality(){for(event in listOf(JSONObject().put("type","error"),start(round=3))){val f=LabFinality();f.accept(start());f.accept(event);assertThrows(IllegalArgumentException::class.java){f.final(done())}}}
+ @Test fun aQuestionFromAnEarlierRoundOrDifferentFinalCannotAuthorizeSpeech(){
+  val raw = """<<<ISKRA_QUESTION>>>{"text":"To pytanie?"}<<<END_ISKRA_QUESTION>>>"""
+  fun question(text:String)=JSONObject().put("type","question").put("text",text)
+  for (scenario in listOf("other", "old", "missing", "extra")) {
+   val f=LabFinality(); f.accept(start())
+   if(scenario!="missing") f.accept(question(if(scenario=="other")"Inne pytanie?" else "To pytanie?"))
+   if(scenario=="old") f.accept(start(round=2))
+   if(scenario=="extra") f.accept(question("Dodatkowe?"))
+   val terminal=done()
+   terminal.getJSONObject("final_response").put("text",raw).put("round",if(scenario=="old")2 else 1)
+   assertEquals(raw,f.final(terminal).getString("text"))
+  }
+ }
  @Test fun nativeVoiceNeedsProviderToolProofAndMatchingText(){val f=LabFinality();f.accept(start());val d=done().put("finality_protocol","promyk.final/v2");val out=d.getJSONObject("final_response").put("schema","promyk.final/v2").put("completion_source","native_voice_reply").put("provider_finish_reason","tool_calls");out.put("voice_plan_candidate",JSONObject().put("schema","promyk.voice/v2").put("text","different"));assertThrows(IllegalArgumentException::class.java){f.final(d)}}
 }

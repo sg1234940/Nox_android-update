@@ -1,4 +1,8 @@
-# Iskra Lab 0.6.10 — ciało i widoczność rozmowy
+# Iskra Lab 0.6.11
+
+Przełącznik tekstu zapisuje samą widoczność dymków. Promyk może odczytać pytanie z potwierdzonej końcowej odpowiedzi. Przy włączonym głosie potwierdzona pusta odpowiedź uruchamia krótki komunikat aplikacji. W rozmowie głosowej po nim wraca nasłuch.
+
+## Iskra Lab 0.6.10 — ciało i widoczność rozmowy
 
 Przycisk **Ukryj tekst / Pokaż tekst** w nagłówku zapamiętuje wybór. Telefon odbiera odpowiedzi i odtwarza głos również podczas ukrycia dymków. W menu **Sterowanie → Sprawdź gest całej postaci** można uruchomić lokalną próbę. **Poza bazowa i reset mimiki** kończy gest.
 

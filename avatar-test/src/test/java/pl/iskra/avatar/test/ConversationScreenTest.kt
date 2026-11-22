@@ -42,6 +42,70 @@ class ConversationScreenTest {
         finally {next.pause().stop().destroy()}
     }
 
+    @Test fun togglingTranscriptOnlyWritesVisibilityAndKeepsPlayback() {
+        val window=Robolectric.buildActivity(AvatarTestActivity::class.java).create().start().resume()
+        try {
+            val a=window.get()
+            val voice = LabVoice.Voice("local-" + "a".repeat(32), "Polski", "pl")
+            val saved = LabPresentation(voiceId=voice.id, expressiveSpeech=true)
+            val prefs=LabPreferences(a)
+            prefs.write(saved)
+            field(a,"profile").set(a,saved)
+            val store=a.getSharedPreferences("avatar_lab_presentation_v1", 0)
+            val before=store.getString("profile",null)
+            val called=mutableListOf<String>()
+            field(a,"voice").set(a,java.lang.reflect.Proxy.newProxyInstance(LabVoice::class.java.classLoader,arrayOf(LabVoice::class.java)) { _, m, _ -> called += m.name; null })
+            field(a,"playingReply").setBoolean(a,true)
+            field(a,"handsFree").setBoolean(a,true)
+            (field(a,"chatToggle").get(a) as android.widget.Button).performClick()
+            assertEquals(before,store.getString("profile",null))
+            assertEquals(saved.copy(showChat=false),prefs.read())
+            assertTrue(field(a,"playingReply").getBoolean(a))
+            assertTrue(field(a,"handsFree").getBoolean(a))
+            assertTrue(called.isEmpty())
+            a.playbackEnded()
+            assertEquals(listOf("listenAfterPlayback"),called)
+        } finally { window.pause().stop().destroy() }
+    }
+
+    @Test fun hiddenHandsFreeConversationResumesAfterEmptyFinalAndSpeaksTheNextAnswer() {
+        val window=Robolectric.buildActivity(AvatarTestActivity::class.java).create().start().resume()
+        try {
+            val a=window.get()
+            val calls=mutableListOf<String>()
+            val spoken=mutableListOf<String>()
+            val fake=java.lang.reflect.Proxy.newProxyInstance(LabVoice::class.java.classLoader,arrayOf(LabVoice::class.java)) { _, method, args ->
+                calls += method.name
+                if(method.name=="speak")spoken += args[0] as String
+                null
+            }
+            field(a,"voice").set(a,fake)
+            val selected=LabVoice.Voice("local-"+"b".repeat(32),"Test","pl")
+            val profile=LabPresentation(voiceId=selected.id,speakTypedReplies=false)
+            field(a,"profile").set(a,profile)
+            field(a,"handsFree").setBoolean(a,true)
+            (field(a,"chatToggle").get(a) as android.widget.Button).performClick()
+            val complete=a.javaClass.declaredMethods.single {it.name=="completeReply"}.apply{isAccessible=true}
+            fun receive(text:String){
+                val turn=LabReplyVoice.forTurn(field(a,"profile").get(a) as LabPresentation,listOf(selected),field(a,"handsFree").getBoolean(a))
+                complete.invoke(a,text,org.json.JSONObject().put("schema","promyk.final/v1").put("text",text),false,turn,true)
+            }
+            receive("")
+            assertEquals(listOf("Komunikat aplikacji. Iskra nie przesłała tekstu odpowiedzi."),spoken)
+            a.playbackEnded()
+            assertEquals(listOf("speak","listenAfterPlayback"),calls)
+            assertTrue(field(a,"handsFree").getBoolean(a))
+            receive("Jestem tutaj.")
+            a.state(LabVoice.State.IDLE,"")
+            assertTrue(field(a,"handsFree").getBoolean(a))
+            assertEquals(2,spoken.size)
+            assertEquals("Jestem tutaj.",spoken.last())
+            assertEquals(View.GONE,(field(a,"transcript").get(a) as ScrollView).visibility)
+            a.playbackEnded()
+            assertEquals("listenAfterPlayback",calls.last())
+        } finally {window.pause().stop().destroy()}
+    }
+
     @Test fun focusingTheComposerOrOpeningTheChatDrawerKeepsThePendingRequest() {
         val window=Robolectric.buildActivity(AvatarTestActivity::class.java).create().start().resume()
         try {

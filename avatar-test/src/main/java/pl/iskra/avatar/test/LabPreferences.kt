@@ -14,8 +14,11 @@ internal class LabPreferences(context: Context) {
             face=j.optBoolean("face"),background=j.optString("background","black"),inputLanguage=j.optString("inputLanguage","pl"),
             outputLanguage=j.optString("outputLanguage","pl"),voiceId=j.optString("voiceId"),lengthScale=j.optDouble("lengthScale",1.0).toFloat(),
             chatTransparency=j.optInt("chatTransparency",40).coerceIn(0,100),chatHeight=j.optInt("chatHeight",35).coerceIn(15,65),
-            showChat=j.optBoolean("showChat",true),expressiveSpeech=j.optBoolean("expressiveSpeech",false), speakTypedReplies=j.optBoolean("speakTypedReplies",true), silenceMs=j.optInt("silenceMs",1200)).checked()
+            showChat=prefs.getBoolean("showChat",j.optBoolean("showChat",true)),expressiveSpeech=j.optBoolean("expressiveSpeech",false), speakTypedReplies=j.optBoolean("speakTypedReplies",true), silenceMs=j.optInt("silenceMs",1200)).checked()
     } catch (_: Exception) { LabPresentation() }
+    fun writeChatVisibility(visible: Boolean) {
+        prefs.edit().putBoolean("showChat", visible).apply()
+    }
     fun write(p: LabPresentation) {
         p.checked()
         val j = JSONObject().put("v",1).put("model",p.model).put("outfit",p.outfit).put("hologram",p.hologram).put("brightness",p.brightness)
