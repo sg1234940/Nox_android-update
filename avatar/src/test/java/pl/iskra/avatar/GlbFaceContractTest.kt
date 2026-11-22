@@ -27,6 +27,25 @@ class GlbFaceContractTest {
         assertEquals(AvatarController.MORPHS, c.names)
         assertEquals(AvatarController.ANIMATIONS, c.animationNames)
     }
+    @Test fun openingJawMovesBothCheeksAndHeadIsASkinJoint() {
+        val b = ByteBuffer.wrap(source).order(ByteOrder.LITTLE_ENDIAN)
+        val jsonLength = b.getInt(12)
+        val gltf = JSONObject(String(b.array(), 20, jsonLength, Charsets.UTF_8))
+        val mesh = gltf.getJSONArray("meshes").getJSONObject(0)
+        val face = mesh.getJSONArray("primitives").getJSONObject(0)
+        val jaw = face.getJSONArray("targets").getJSONObject(AvatarController.MORPHS.indexOf("jawOpen"))
+        val pos = gltf.getJSONArray("accessors").getJSONObject(jaw.getInt("POSITION"))
+        val view = gltf.getJSONArray("bufferViews").getJSONObject(pos.getInt("bufferView"))
+        val offset = 28 + jsonLength + pos.optInt("byteOffset", 0) + view.optInt("byteOffset", 0)
+        // Two landmarks above the corners of the lips on the reviewed mesh.
+        for (vertex in listOf(12138, 52508)) {
+            val down = b.getFloat(offset + vertex * 12 + 4)
+            assertTrue("cheek $vertex should follow the jaw", down in -.009f..-.005f)
+        }
+        val joints = gltf.getJSONArray("skins").getJSONObject(0).getJSONArray("joints")
+        val nodes = gltf.getJSONArray("nodes")
+        assertTrue((0 until joints.length()).any { nodes.getJSONObject(joints.getInt(it)).optString("name") == "Head" })
+    }
     @Test(expected = IllegalArgumentException::class) fun corruptHeaderRejected() {
         GlbFaceContractReader.read(source.apply { this[0] = 0 })
     }

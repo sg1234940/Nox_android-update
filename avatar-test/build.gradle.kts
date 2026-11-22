@@ -10,8 +10,8 @@ android {
         applicationId = "pl.iskra.avatar.lab"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.6.6-test"
+        versionCode = 13
+        versionName = "0.6.7-test"
         ndk { abiFilters += if(project.findProject(":avatar-voice")!=null) listOf("arm64-v8a") else listOf("arm64-v8a", "x86_64") }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }

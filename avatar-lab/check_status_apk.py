@@ -45,13 +45,13 @@ def check(apk, dexdump, version):
     assert '.layoutControls:' in controls, 'Controls must reserve a visible avatar viewport'
     viewport = next(m for m in methods if re.search(r"name\s+: 'layoutControls'", m))
     assert viewport.count('.setLayoutParams:') >= 2, 'Panel and avatar viewport must resize separately'
-    if version in {'0.6.4', '0.6.5', '0.6.6'}:
+    if version in {'0.6.4', '0.6.5', '0.6.6', '0.6.7'}:
         chat = next(m for m in methods if re.search(r"name\s+: 'chatSettings'", m))
         assert 'Przezroczystość tła' in chat and 'Wysokość czatu' in chat
         assert '.layoutChat:' in screen and '.applyChatAppearance:' in screen
         layout = next(m for m in methods if re.search(r"name\s+: 'layoutChat'", m))
         assert '.getHeight:' in layout and '.setLayoutParams:' in layout
-    if version in {'0.6.5', '0.6.6'}:
+    if version in {'0.6.5', '0.6.6', '0.6.7'}:
         result = next(m for m in methods if re.search(r"name\s+: 'onActivityResult'", m))
         assert '.importVoiceFolder:' in result, 'Folder selection must start voice import'
         progress = next(m for m in methods if re.search(r"name\s+: 'showVoiceImportProgress'", m))
@@ -60,12 +60,13 @@ def check(apk, dexdump, version):
         assert '.dismiss:' in importing and '.showVoiceImportProgress:' in importing
         assert '.refreshVoices:' in screen and 'Import zakończony.' in screen
         print('PASS: packaged folder import opens visible progress and reports completion')
-    if version == '0.6.6':
+    if version in {'0.6.6', '0.6.7'}:
         submit = next(m for m in methods if re.search(r"name\s+: 'submit'", m))
         assert '.forTurn:' in submit and '.context:' in submit, 'Typed and hands-free turns must advertise output'
         playback = next(m for m in methods if re.search(r"name\s+: 'playback'\s+type\s+: '\(Ljava/lang/String;JF\)V'", m))
         assert 'playingReply' in playback and 'handsFree' not in playback, 'PCM must animate typed replies, too'
-        assert '.speak:' in screen and 'Sprawdź głos i ruch ust' in screen
+        label = 'Sprawdź głos i mimikę' if version == '0.6.7' else 'Sprawdź głos i ruch ust'
+        assert '.speak:' in screen and label in screen
         print('PASS: packaged client requests speech, offers local playback and drives mouth from audio')
     print('PASS: packaged screen hides ready status and contains visible build ' + version)
     print('PASS: packaged manual controls use inline sliders and reserve the avatar viewport')

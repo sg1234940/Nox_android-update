@@ -64,7 +64,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   root.addView(overlay,FrameLayout.LayoutParams(-1,-1))
   header=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL}
   header.addView(button("☰"){openDrawer()},LinearLayout.LayoutParams(dp(60),dp(52)))
-  header.addView(label("Iskra Lab 0.6.6",18f),LinearLayout.LayoutParams(0,dp(56),1f))
+  header.addView(label("Iskra Lab 0.6.7",18f),LinearLayout.LayoutParams(0,dp(56),1f))
   header.addView(button("⚙"){settings()},LinearLayout.LayoutParams(dp(60),dp(52)))
   overlay.addView(header);overlay.addView(View(this),LinearLayout.LayoutParams(-1,0,1f))
   notice=label("",12f).apply {visibility=View.GONE;setPadding(dp(12),dp(4),dp(12),0);accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE}
@@ -215,12 +215,12 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
    text="Mów także po wpisaniu wiadomości";isChecked=profile.speakTypedReplies
    setOnCheckedChangeListener { _, enabled -> profile=profile.copy(speakTypedReplies=enabled);save() }
   })
-  c.addView(button("Sprawdź głos i ruch ust"){
+  c.addView(button("Sprawdź głos i mimikę"){
    val selected=voices.firstOrNull{it.id==profile.voiceId && it.language==profile.outputLanguage}
    if(selected==null){Toast.makeText(this,"Najpierw wybierz lub zaimportuj głos Piper.",Toast.LENGTH_LONG).show()}
    else {
     voiceDialog?.dismiss();interrupt()
-    playSpeech("To jest próba głosu i ruchu ust.",selected.id,profile.lengthScale)
+    playSpeech("Dzień dobry. Słyszysz mnie? To ja, Iskra. Tak brzmi mój głos.",selected.id,profile.lengthScale)
    }
   })
   c.addView(label("Język rozpoznawania mowy"));val inputs=(listOf(profile.inputLanguage)+ears).distinct();c.addView(spinner(inputs.map{if(it in ears)it else "$it · brak modelu"},inputs.indexOf(profile.inputLanguage)){profile=profile.copy(inputLanguage=inputs[it]);save()})

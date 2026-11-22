@@ -205,7 +205,7 @@ class AvatarSurfaceView(context: Context) : SurfaceView(context) {
     private fun checkMain() = check(Looper.myLooper() == Looper.getMainLooper())
     companion object {
         const val ASSET_PATH = "avatar/iskra.glb"
-        const val MODEL_SHA256 = "451ebc87620b95500163716e77b7433d6ef7d765a2b33391a0df08f2b921848c"
+        const val MODEL_SHA256 = "0f1d4325bcda5504acee3cfe57b35797eb8c15f1cf5fed1cb0dd70286577b4cc"
     }
 }
 
@@ -231,6 +231,10 @@ private class RenderSession(context: Context) : AutoCloseable {
     private var selectedAnimation: String? = null
     private var animationIndex: Int? = null
     private val bodyPlayback = BodyPlayback()
+    private var headInstance = 0
+    private var headApplied = false
+    private val headBase = FloatArray(16)
+    private val headPose = FloatArray(16)
     private val bindTransforms = linkedMapOf<Int, FloatArray>()
     private var lastFrame = 0L
     private var closed = false
@@ -302,9 +306,12 @@ private class RenderSession(context: Context) : AutoCloseable {
             for(id in (created.entities+intArrayOf(created.root)).distinct()){
                 val i=transforms.getInstance(id);if(i!=0)nextBinds[i]=transforms.getTransform(i,FloatArray(16))
             }
+            val head = created.getEntitiesByName("Head").singleOrNull()?.let { transforms.getInstance(it) } ?: 0
             a.updateBoneMatrices();engine.renderableManager.setMorphWeights(instance,FloatArray(parsed.names.size),0)
             created.releaseSourceData();scene.addEntities(created.entities)
             val previous=asset
+            headInstance = head
+            headApplied = false
             asset=created;animator=a;morphInstance=instance;parsedContract=parsed;lastAppearance=null
             bindTransforms.clear();bindTransforms.putAll(nextBinds);selectedAnimation=null;animationIndex=null;bodyPlayback.frame(null,0f,false)
             previous?.let{scene.removeEntities(it.entities);loader!!.destroyAsset(it)}
@@ -315,16 +322,30 @@ private class RenderSession(context: Context) : AutoCloseable {
         val dt = if (lastFrame == 0L) 0f else ((now - lastFrame) / 1e9f).coerceIn(0f, .1f)
         lastFrame = now
         val body = bodyPlayback.frame(state.animation, dt, state.bodyPaused)
+        val transforms = engine.transformManager
+        // Restore last frame's unmodified joint before sampling the body clip.
+        // This also handles clips that do not key the head.
+        var bonesChanged = headApplied || body.restoreBindPose
+        if (headApplied) transforms.setTransform(headInstance, headBase)
+        headApplied = false
         if (body.restoreBindPose) {
             for ((instance, transform) in bindTransforms) engine.transformManager.setTransform(instance, transform)
             selectedAnimation = body.animation
             animationIndex = animator?.let { a -> (0 until a.animationCount).firstOrNull { a.getAnimationName(it) == selectedAnimation } }
-            animator?.updateBoneMatrices()
         }
         animator?.let { a -> animationIndex?.let { i ->
             val duration = a.getAnimationDuration(i)
-            a.applyAnimation(i, if (duration > 0f) body.seconds % duration else 0f); a.updateBoneMatrices()
+            a.applyAnimation(i, if (duration > 0f) body.seconds % duration else 0f)
+            bonesChanged = true
         } }
+        if (headInstance != 0 && state.headPitchDegrees > .01f) {
+            transforms.getTransform(headInstance, headBase)
+            pitchHead(headBase, state.headPitchDegrees, headPose)
+            transforms.setTransform(headInstance, headPose)
+            headApplied = true
+            bonesChanged = true
+        }
+        if (bonesChanged) animator?.updateBoneMatrices()
         if (morphInstance != 0) engine.renderableManager.setMorphWeights(morphInstance, state.weights, 0)
         val distance = (if (closeup) .74 else 3.4) / zoom
         val targetY = if (closeup) 1.70 else .95
@@ -380,5 +401,18 @@ private class RenderSession(context: Context) : AutoCloseable {
         }
         attempt { engine.destroy() }
         failure?.let { throw IllegalStateException("Avatar resource cleanup failed", it) }
+    }
+}
+
+
+/** Post-multiply the local joint by a pitch about its own pivot (column-major). */
+internal fun pitchHead(base: FloatArray, degrees: Float, out: FloatArray) {
+    val angle = Math.toRadians(degrees.toDouble())
+    val c = cos(angle).toFloat()
+    val s = sin(angle).toFloat()
+    base.copyInto(out)
+    for (row in 0..3) {
+        out[4 + row] = c * base[4 + row] + s * base[8 + row]
+        out[8 + row] = c * base[8 + row] - s * base[4 + row]
     }
 }

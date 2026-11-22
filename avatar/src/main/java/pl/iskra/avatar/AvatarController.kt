@@ -20,7 +20,8 @@ class AvatarController {
     }
     data class Event(val conversationId: String, val turnId: Long, val sequence: Long, val command: Command)
     data class Snapshot(val phase: Phase, val animation: String?, val weights: FloatArray,
-                        val playbackId: String?, val positionMs: Long?, val bodyPaused: Boolean = false)
+                        val playbackId: String?, val positionMs: Long?, val bodyPaused: Boolean = false,
+                        val headPitchDegrees: Float = 0f)
     companion object {
         val MORPHS = listOf("eyeBlinkLeft", "eyeBlinkRight", "eyesLeft", "eyesRight", "eyesUp", "eyesDown",
             "browInnerUp", "browDownLeft", "browDownRight", "jawOpen", "mouthSmile", "mouthFrown",
@@ -29,6 +30,9 @@ class AvatarController {
             "HumanJoyfulJump", "HumanOffensiveIdle", "HumanSitting3")
         val OPENING_GAINS = mapOf("jawOpen" to 1f, "mouthFunnel" to .35f, "viseme_A" to .85f,
             "viseme_E" to .45f, "viseme_I" to .24f, "viseme_O" to .60f, "viseme_U" to .35f)
+        private val INNER_BROW = MORPHS.indexOf("browInnerUp")
+        private val LEFT_BROW_DOWN = MORPHS.indexOf("browDownLeft")
+        private val RIGHT_BROW_DOWN = MORPHS.indexOf("browDownRight")
         val VISEMES = MORPHS.filter { it.startsWith("viseme_") }
     }
     private var conversation: String? = null
@@ -40,6 +44,10 @@ class AvatarController {
     private var bodyPaused = false
     private var playback: String? = null
     private var position: Long? = null
+    private var speechEnergy = 0f
+    private var audioAge = 0f
+    private var phrase = 0f
+    private var sustained = 0f
     private var target = FloatArray(MORPHS.size)
     private val pose = FloatArray(MORPHS.size)
     private var current = FloatArray(MORPHS.size)
@@ -80,6 +88,8 @@ class AvatarController {
             is Command.BodyPaused -> bodyPaused = c.paused
             is Command.SpeechStarted -> { clearSpeech(); playback = c.playbackId; phase = Phase.SPEAKING }
             is Command.SpeechFrame -> {
+                if (position != c.positionMs) audioAge = 0f
+                speechEnergy = c.energy
                 position = c.positionMs
                 for (name in VISEMES) {
                     val index = MORPHS.indexOf(name)
@@ -98,17 +108,33 @@ class AvatarController {
     @Synchronized fun suspendPlayback() { suspended = true; clearSpeech(); phase = Phase.IDLE }
     @Synchronized fun frame(dtSeconds: Float): Snapshot {
         require(dtSeconds.isFinite() && dtSeconds >= 0f)
-        val a = 1f - exp(-14f * dtSeconds.coerceAtMost(.1f))
+        val dt = dtSeconds.coerceAtMost(.1f)
+        val a = 1f - exp(-14f * dt)
         for (i in current.indices) current[i] += (target[i] - current[i]) * a
         val rendered = current.copyOf()
         val opening = OPENING_GAINS.entries.sumOf { (name, gain) -> (rendered[MORPHS.indexOf(name)] * gain).toDouble() }.toFloat()
         if (opening > 1f) for (name in OPENING_GAINS.keys) rendered[MORPHS.indexOf(name)] /= opening
-        return Snapshot(phase, animation, rendered, playback, position, bodyPaused)
+        var pitch = 0f
+        if (playback != null) {
+            audioAge += dtSeconds
+            val energy = if (audioAge <= .16f) speechEnergy else 0f
+            // The difference between short and long envelopes follows accents.
+            // A held vowel settles. A new phrase can lift the brows again.
+            phrase += (energy - phrase) * (1f - exp(-7f * dt))
+            sustained += (energy - sustained) * (1f - exp(-1.4f * dt))
+            val accent = (phrase - sustained).coerceAtLeast(0f)
+            val browRoom = (1f - rendered[INNER_BROW]) *
+                (1f - maxOf(rendered[LEFT_BROW_DOWN], rendered[RIGHT_BROW_DOWN]))
+            rendered[INNER_BROW] += browRoom * (.15f * phrase + .44f * accent)
+            if (!bodyPaused) pitch = 1.1f * phrase + 4.2f * accent
+        }
+        return Snapshot(phase, animation, rendered, playback, position, bodyPaused, pitch)
     }
     @Synchronized fun snapshot() = Snapshot(phase, animation, target.copyOf(), playback, position, bodyPaused)
     private fun clearSpeech() {
         if (playback == null) return
         playback = null; position = null
+        speechEnergy = 0f; audioAge = 0f; phrase = 0f; sustained = 0f
         for (name in VISEMES + "jawOpen") {
             val i = MORPHS.indexOf(name); target[i] = pose[i]; current[i] = pose[i]
         }

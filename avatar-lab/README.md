@@ -1,3 +1,9 @@
+# Iskra Lab 0.6.7 — mimika podczas mówienia
+
+Na wbudowanym modelu policzki podążają za szczęką. Brwi i pochylenie głowy reagują na akcenty odtwarzanego głosu. Próbę lokalną uruchamia przycisk **Sprawdź głos i mimikę** w ustawieniach głosu.
+
+Przed kompilacją uruchom `python3 avatar-lab/install_asset.py /ścieżka/do/poprzedniego.apk`. Instalator rozpoznaje model z 0.6.6, nanosi poprawkę policzków i sprawdza wynik. Przyjmuje również gotowy model z APK 0.6.7. SHA-256 wynikowego GLB wynosi `0f1d4325bcda5504acee3cfe57b35797eb8c15f1cf5fed1cb0dd70286577b4cc`.
+
 # Kandydat 0.6.4 — wygląd czatu i rozpoznawanie błędów
 
 Menu ⚙ → Wygląd czatu (również lewe menu) udostępnia przezroczystość tła 0–100% oraz wysokość rozmowy 15–65% przestrzeni nad polem wpisywania. Ustawienia działają na istniejące i nowe chmurki, są zapisywane lokalnie i odtwarzane po uruchomieniu. Tylko tło zmienia przezroczystość, tekst i mikrofon zachowują widoczność. Wysokość uwzględnia klawiaturę, nagłówek, dolny panel i insets; ręczne sterowanie nadal ma osobny viewport.

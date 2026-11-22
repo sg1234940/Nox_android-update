@@ -7,21 +7,29 @@ from pathlib import Path
 import tempfile
 import zipfile
 
-SHA256 = '451ebc87620b95500163716e77b7433d6ef7d765a2b33391a0df08f2b921848c'
+from cheek_rig import SOURCE_SHA, add_cheeks
+
+SHA256 = '0f1d4325bcda5504acee3cfe57b35797eb8c15f1cf5fed1cb0dd70286577b4cc'
 
 def install(apk, destination):
     destination = Path(destination)
     if destination.exists():
-        if hashlib.sha256(destination.read_bytes()).hexdigest() != SHA256:
+        data = destination.read_bytes()
+        existing = hashlib.sha256(data).hexdigest()
+        if existing == SHA256:
+            return 'already installed'
+        if existing != SOURCE_SHA:
             raise ValueError('Destination contains a different model; move it before installation.')
-        return 'already installed'
-    with zipfile.ZipFile(apk) as archive:
-        info = archive.getinfo('assets/avatar/iskra.glb')
-        if not 1 <= info.file_size <= 100 * 1024 * 1024:
-            raise ValueError('Unexpected model size')
-        data = archive.read(info)
+    else:
+        with zipfile.ZipFile(apk) as archive:
+            info = archive.getinfo('assets/avatar/iskra.glb')
+            if not 1 <= info.file_size <= 100 * 1024 * 1024:
+                raise ValueError('Unexpected model size')
+            data = archive.read(info)
+    if hashlib.sha256(data).hexdigest() == SOURCE_SHA:
+        data = add_cheeks(data)
     if hashlib.sha256(data).hexdigest() != SHA256:
-        raise ValueError('APK contains a different model')
+        raise ValueError('Unexpected avatar model')
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:
