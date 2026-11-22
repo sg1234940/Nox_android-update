@@ -17,11 +17,13 @@ interface LabVoice : AutoCloseable {
         fun playback(id: String, positionMs: Long, energy: Float)
         fun playbackEnded()
     }
-    enum class State { IDLE, LISTENING, RECOGNIZING, SYNTHESIZING, SPEAKING, FAILED }
+    enum class State { IDLE, LISTENING, RECOGNIZING, SYNTHESIZING, SPEAKING, ECHO_UNAVAILABLE, FAILED }
     var events: Events?
     fun catalogue(callback: (List<Voice>, List<String>, String?) -> Unit)
     fun importModels(folder: Uri, callback: (String?) -> Unit)
     fun listen(settings: Settings, echoGuarded: Boolean = false)
+    fun listenAfterPlayback(settings: Settings)
+    fun stopListening()
     fun finishListening()
     fun speak(text: String, voiceId: String, lengthScale: Float, phrases: List<Phrase> = emptyList())
     fun interruptSpeech()

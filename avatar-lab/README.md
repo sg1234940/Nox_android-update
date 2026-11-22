@@ -1,3 +1,7 @@
+# Iskra Lab 0.6.9 — kolejne wypowiedzi
+
+Rozmowa głosowa pokazuje w czacie rozpoznane słowa i odpowiedzi Iskry. Podczas oczekiwania można pisać następną wiadomość, otworzyć menu i poruszać kamerą. Przycisk **Przerwij odpowiedź** kończy oczekiwanie. Po odtworzeniu głosu mikrofon wraca do zwykłego nasłuchu. Rozpoczęta wypowiedź użytkownika może dokończyć rozpoznawanie.
+
 # Iskra Lab 0.6.8 — Promyk i Parakeet
 
 Lab rozpoznaje mowę lokalnie przez Parakeet TDT 0.6B v3 INT8. W ustawieniach **Głos i język** można zaimportować sam rozpakowany folder Parakeeta. Taki import zachowuje głosy Piper zapisane przez poprzedni Lab. Przycisk **Sprawdź mikrofon i Parakeet** pokazuje lokalną transkrypcję. Aby sprawdzić głos i ruch twarzy, wybierz **Sprawdź głos i mimikę**.

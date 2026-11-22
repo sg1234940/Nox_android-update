@@ -38,6 +38,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
  private var voice:LabVoice?=null;private var foreground=false;private var handsFree=false
  private var listening=false;private var talking=false;private var drawerOpen=false;private var textMode=false
  private var turn=0L;private var sequence=0L;private var playback:String?=null
+ private lateinit var cancelReply: Button
  private var testingMic=false;private var resumedTurn=false;private var pendingImport="avatar";private var pendingMicPermission=0;private var grantedMicRequest=0
  private var life=0L;private var initializedAppearance=false
  private var previewDialog:AlertDialog?=null
@@ -64,7 +65,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   root.addView(overlay,FrameLayout.LayoutParams(-1,-1))
   header=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL}
   header.addView(button("☰"){openDrawer()},LinearLayout.LayoutParams(dp(60),dp(52)))
-  header.addView(label("Iskra Lab 0.6.8",18f),LinearLayout.LayoutParams(0,dp(56),1f))
+  header.addView(label("Iskra Lab 0.6.9",18f),LinearLayout.LayoutParams(0,dp(56),1f))
   header.addView(button("⚙"){settings()},LinearLayout.LayoutParams(dp(60),dp(52)))
   overlay.addView(header);overlay.addView(View(this),LinearLayout.LayoutParams(-1,0,1f))
   notice=label("",12f).apply {visibility=View.GONE;setPadding(dp(12),dp(4),dp(12),0);accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE}
@@ -74,6 +75,10 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   input=EditText(this).apply {hint="Napisz do Iskry…";setHintTextColor(0xff94aec8.toInt());setTextColor(Color.WHITE);background=null;maxLines=4;minLines=1;setSingleLine(false)}
   action=ImageButton(this).apply {background=GradientDrawable().apply{shape=GradientDrawable.OVAL;setColor(0xff00bde9.toInt())};imageTintList=android.content.res.ColorStateList.valueOf(0xff082137.toInt())}
   composer.addView(input,LinearLayout.LayoutParams(0,-2,1f));composer.addView(action,LinearLayout.LayoutParams(dp(52),dp(52)))
+  cancelReply=button("Przerwij odpowiedź"){
+   if(lab.busy){interrupt();showTranscript();sayStatus("Przerwano oczekiwanie na odpowiedź.")}
+  }.apply { visibility=View.GONE }
+  composer.addView(cancelReply,LinearLayout.LayoutParams(-2,dp(48)))
   footer=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL;background=chatPanel();addView(notice);addView(composer)}
   overlay.addView(footer,LinearLayout.LayoutParams(-1,-2).apply {setMargins(dp(10),dp(8),dp(10),dp(8))})
   shade=View(this).apply {setBackgroundColor(0x77000000);visibility=View.GONE;setOnClickListener{closeDrawer()}};root.addView(shade,FrameLayout.LayoutParams(-1,-1))
@@ -81,9 +86,14 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   lab=AvatarLabControls(this,avatar,begin={newTurn()},send=::emit,camera={profile.angle to profile.face},setCamera={a,f->profile=profile.copy(angle=a,face=f);applyCamera();save()},refresh={})
   voice=try {Class.forName("pl.iskra.avatar.voice.PromykLabVoice").getConstructor(android.content.Context::class.java).newInstance(this) as LabVoice}catch(_:Exception){null}
   voice?.events=this;refreshVoices()
-  action.setOnClickListener {if(input.text.isNotBlank())sendTyped() else if(listening&&!talking){voice?.finishListening();sayStatus("Kończę nagranie…")} else if(testingMic){interrupt();sayStatus("Przerwano próbę mikrofonu.")}else if(playingReply&&!handsFree){interrupt();sayStatus("Zatrzymano głos.")}else if(talking||lab.busy){interrupt();startVoice()}else startVoice()}
-  input.setOnFocusChangeListener {_,focus->if(focus){interrupt();textMode=true;transcript.visibility=View.VISIBLE;refreshAction()}}
-  input.addTextChangedListener(object:TextWatcher {override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){};override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){refreshAction()};override fun afterTextChanged(s:Editable?){} })
+  action.setOnClickListener {if(input.text.isNotBlank())sendTyped() else if(listening&&!talking){voice?.finishListening();sayStatus("Kończę nagranie…")} else if(testingMic){interrupt();sayStatus("Przerwano próbę mikrofonu.")}else if(playingReply){val resume=handsFree;interrupt();if(resume)startVoice()else sayStatus("Zatrzymano głos.")}else if(lab.busy){sayStatus("Czekam na odpowiedź Iskry…")}else if(talking){interrupt();startVoice()}else startVoice()}
+  input.setOnFocusChangeListener {_,focus->if(focus){showTranscript();refreshAction()}}
+  input.addTextChangedListener(object:TextWatcher {override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){};override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){
+   if(!s.isNullOrBlank() && (handsFree || testingMic)){
+    handsFree=false;testingMic=false;listening=false;voice?.stopListening()
+   }
+   refreshAction()
+  };override fun afterTextChanged(s:Editable?){} })
   avatar.onStatus={message->if(message.startsWith("Model gotowy")){sayStatus("");if(!initializedAppearance){initializedAppearance=true;applyProfileModel();applyBackground()}}else sayStatus(message)}
   installGestures();applyCamera();avatar.setAppearance(profile.hologram,profile.brightness);refreshAction();buildDrawer()
   root.setOnApplyWindowInsetsListener {v,insets->v.setPadding(0,insets.systemWindowInsetTop,0,insets.systemWindowInsetBottom);insets}
@@ -91,7 +101,26 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   footer.addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->layoutChat()}
   setContentView(root);root.requestApplyInsets();root.post {applyChatAppearance()}
  }
- private fun refreshAction(){val mode=profile.action(input.text.isNotBlank(),listening || (playingReply && !handsFree));action.setImageResource(when(mode){"SEND"->android.R.drawable.ic_menu_send;"STOP"->android.R.drawable.ic_media_pause;else->android.R.drawable.ic_btn_speak_now});action.contentDescription=when(mode){"SEND"->"Wyślij";"STOP"->if(playingReply && !handsFree)"Zatrzymaj głos" else "Przerwij nagrywanie";else->"Mikrofon"}}
+ private fun refreshAction(){
+  val waiting=::lab.isInitialized && lab.busy
+  cancelReply.visibility=if(waiting)View.VISIBLE else View.GONE
+  val mode=profile.action(input.text.isNotBlank(),listening || playingReply)
+  action.isEnabled=!waiting
+  action.alpha=if(action.isEnabled)1f else .55f
+  action.setImageResource(when{
+   !action.isEnabled -> android.R.drawable.ic_menu_recent_history
+   mode=="SEND" -> android.R.drawable.ic_menu_send
+   mode=="STOP" -> android.R.drawable.ic_media_pause
+   else -> android.R.drawable.ic_btn_speak_now
+  })
+  action.contentDescription=when{
+   !action.isEnabled -> "Oczekiwanie na odpowiedź"
+   mode=="SEND" -> "Wyślij"
+   playingReply -> "Przerwij głos"
+   listening -> "Zakończ nagranie"
+   else -> "Mikrofon"
+  }
+ }
  private fun sayStatus(text:String){notice.text=text;notice.visibility=if(text.isBlank()||text=="Gotowe")View.GONE else View.VISIBLE}
  private fun save(){try{preferences.write(profile)}catch(_:Exception){sayStatus("Nie zapisano ustawień. Dotychczasowy zapis pozostaje zachowany.")}}
  private fun applyCamera(){avatar.setCamera(profile.angle,profile.face);avatar.setZoom(profile.zoom)}
@@ -101,7 +130,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   if((!testOnly && voices.none{it.id==profile.voiceId && it.language==profile.outputLanguage}) || profile.inputLanguage !in ears){sayStatus("Wybierz zainstalowane modele w Głos i język.");voiceSettings();return}
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){pendingMicPermission=if(testOnly)85 else 81;requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO),pendingMicPermission);return}
   input.clearFocus();(getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(input.windowToken,0)
-  testingMic=testOnly;handsFree=!testOnly;textMode=false;transcript.visibility=View.GONE;voice?.listen(voiceSettingsValue());refreshAction()
+  testingMic=testOnly;handsFree=!testOnly;showTranscript();voice?.listen(voiceSettingsValue());refreshAction()
  }
  private fun voiceSettingsValue()=LabVoice.Settings(profile.inputLanguage,profile.outputLanguage,profile.voiceId,profile.lengthScale,profile.silenceMs)
  private fun refreshVoices(done:((String?)->Unit)?=null){voice?.catalogue {available,languages,error->if(isFinishing||isDestroyed)return@catalogue;voices=available;ears=languages
@@ -117,8 +146,8 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   catch(_:Exception){ playingReply=false;handsFree=false;refreshAction();showTranscript();sayStatus("Nie udało się uruchomić wybranego głosu Piper.") }
  }
  private fun showTranscript(){textMode=true;transcript.visibility=View.VISIBLE}
- private fun bubble(text:String,user:Boolean){val view=label(text,16f).apply{background=chatPanel()};bubbles.addView(view,LinearLayout.LayoutParams(-1,-2).apply{setMargins(if(user)dp(36) else 0,dp(5),if(user)0 else dp(36),dp(5))});while(bubbles.childCount>100)bubbles.removeViewAt(0);transcript.post{transcript.fullScroll(View.FOCUS_DOWN)}}
- private fun sendTyped(){val text=input.text.toString().trim();if(text.isEmpty())return;interrupt();textMode=true;transcript.visibility=View.VISIBLE;input.setText("");submit(text)}
+ private fun bubble(text:String,user:Boolean){showTranscript();val view=label(text,16f).apply{background=chatPanel()};bubbles.addView(view,LinearLayout.LayoutParams(-1,-2).apply{setMargins(if(user)dp(36) else 0,dp(5),if(user)0 else dp(36),dp(5))});while(bubbles.childCount>100)bubbles.removeViewAt(0);transcript.post{transcript.fullScroll(View.FOCUS_DOWN)}}
+ private fun sendTyped(){val text=input.text.toString().trim();if(text.isEmpty() || lab.busy)return;interrupt();textMode=true;transcript.visibility=View.VISIBLE;input.setText("");submit(text)}
  private fun submit(text:String){
   if(!foreground || text.length>8000){sayStatus("Wypowiedź musi mieć najwyżej 8000 znaków.");return}
   if(lab.busy)lab.cancel()
@@ -140,18 +169,26 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
      else -> "Tę odpowiedź można odczytać w czacie. Jej treść lub parametry wykraczają poza obsługiwany zakres mowy."
     })
    } else sayStatus("Gotowe")
-  },onError={handsFree=false;emit(AvatarController.Command.Interrupted);sayStatus(it)})
+   refreshAction()
+  },onError={handsFree=false;showTranscript();emit(AvatarController.Command.Interrupted);sayStatus(it);refreshAction()})
+  refreshAction()
   emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.THINKING))
  }
  override fun state(value:LabVoice.State,message:String){if(!foreground)return
   when(value){LabVoice.State.LISTENING->{listening=true;if(!talking)emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.LISTENING))}
    LabVoice.State.RECOGNIZING->{listening=false;if(!talking)emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.THINKING))}
    LabVoice.State.SPEAKING->{talking=true;if(handsFree&&!listening)voice?.listen(voiceSettingsValue(),true)}
+   LabVoice.State.ECHO_UNAVAILABLE->{
+    listening=false
+    if(!playingReply && handsFree && !lab.busy){voice?.listen(voiceSettingsValue());refreshAction();return}
+   }
    LabVoice.State.FAILED->{testingMic=false;listening=false;if(!talking){handsFree=false;playingReply=false;speechError=true;showTranscript()}}
-   LabVoice.State.IDLE->{testingMic=false;listening=false;if(!talking)emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.IDLE))}
+   LabVoice.State.IDLE->{testingMic=false;listening=false;if(!playingReply&&!lab.busy)handsFree=false;if(!talking)emit(AvatarController.Command.PhaseChanged(AvatarController.Phase.IDLE))}
    else->Unit}
   notice.setTextColor(when(value){LabVoice.State.LISTENING->0xff24d2ed.toInt();LabVoice.State.SPEAKING->0xff57e2a1.toInt();LabVoice.State.RECOGNIZING,LabVoice.State.SYNTHESIZING->0xffffd468.toInt();else->0xffe4edf6.toInt()})
-  if(message.isNotBlank())sayStatus(message);refreshAction()
+  if(message.isNotBlank())sayStatus(message)
+  else if(value==LabVoice.State.IDLE && !talking && !lab.busy){handsFree=false;sayStatus("Nie wykryto mowy. Dotknij mikrofonu, aby mówić.")}
+  refreshAction()
  }
  override fun transcript(text:String){
   if(!foreground)return
@@ -165,7 +202,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
  override fun speechDetected(){if(foreground&&handsFree&&talking){lab.cancel();playingReply=false;voice?.interruptSpeech();talking=false;playback=null;emit(AvatarController.Command.Interrupted);sayStatus("Słucham…")}}
  override fun playback(id:String,positionMs:Long,energy:Float){if(!foreground||!playingReply)return;if(playback!=id){playback=id;emit(AvatarController.Command.SpeechStarted(id))};emit(AvatarController.Command.SpeechFrame(id,positionMs,energy))}
  override fun playbackEnded(){if(!foreground)return;playingReply=false;playback?.let{emit(AvatarController.Command.SpeechStopped(it))};playback=null;talking=false
-  if(handsFree&&!listening)voice?.listen(voiceSettingsValue()) else if(!handsFree&&!speechError)sayStatus("Gotowe");refreshAction()}
+  if(handsFree&&!lab.busy)voice?.listenAfterPlayback(voiceSettingsValue()) else if(!handsFree&&!speechError)sayStatus("Gotowe");refreshAction()}
  private fun buildDrawer(){drawer.removeAllViews();drawer.addView(label("Iskra Lab",24f));drawer.addView(label("Widok"))
   drawer.addView(button("Cała postać"){closeDrawer();profile=profile.copy(face=false);applyCamera();save()})
   drawer.addView(button("Twarz"){closeDrawer();profile=profile.copy(face=true);applyCamera();save()})
@@ -177,7 +214,7 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
   drawer.addView(button("Jasność hologramu"){closeDrawer();sliderDialog("Jasność hologramu",profile.brightness,.2f,2f){profile=profile.copy(brightness=it);avatar.setAppearance(profile.hologram,it);save()}})
   drawer.addView(button("Wygląd czatu"){closeDrawer();chatSettings()});drawer.addView(button("Tło"){closeDrawer();backgroundSettings()});drawer.addView(button("Głos i język"){closeDrawer();voiceSettings()});drawer.addView(button("Połączenie"){closeDrawer();connectionSettings()})
  }
- private fun openDrawer(){closeControls();interrupt();(getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(input.windowToken,0);drawerOpen=true;shade.visibility=View.VISIBLE;val v=root.findViewWithTag<View>("drawer");v.visibility=View.VISIBLE;drawer.visibility=View.VISIBLE;v.translationX=-dp(292).toFloat();v.animate().translationX(0f).setDuration(160).start()}
+ private fun openDrawer(){closeControls();(getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(input.windowToken,0);drawerOpen=true;shade.visibility=View.VISIBLE;val v=root.findViewWithTag<View>("drawer");v.visibility=View.VISIBLE;drawer.visibility=View.VISIBLE;v.translationX=-dp(292).toFloat();v.animate().translationX(0f).setDuration(160).start()}
  private fun closeDrawer(){drawerOpen=false;shade.visibility=View.GONE;root.findViewWithTag<View>("drawer").visibility=View.GONE}
  override fun onBackPressed(){if(controlsPanel!=null)closeControls()else if(drawerOpen)closeDrawer()else super.onBackPressed()}
  private fun chatPanel():GradientDrawable {
@@ -340,8 +377,8 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
    main.post{if(isDestroyed||revision!=backgroundVersion){bitmap?.recycle();return@post};if(bitmap!=null)avatar.setSceneBackground(bitmap)else sayStatus("Tło niedostępne. Zachowano poprzedni widok.")}}
  }
  private fun installGestures(){var x=0f;var down=0f;var moved=false
-  val scale=ScaleGestureDetector(this,object:ScaleGestureDetector.SimpleOnScaleGestureListener(){override fun onScale(d:ScaleGestureDetector):Boolean{profile=profile.copy(zoom=(profile.zoom*d.scaleFactor).coerceIn(.65f,1.8f));applyCamera();return true};override fun onScaleBegin(d:ScaleGestureDetector):Boolean{interrupt();return true};override fun onScaleEnd(d:ScaleGestureDetector){save()}})
-  avatar.setOnTouchListener{_,e->scale.onTouchEvent(e);when(e.actionMasked){MotionEvent.ACTION_DOWN->{x=e.x;down=e.x;moved=false;true};MotionEvent.ACTION_MOVE->{if(!scale.isInProgress){val dx=e.x-x;if(kotlin.math.abs(e.x-down)>dp(8)){if(!moved)interrupt();moved=true;profile=profile.copy(angle=(profile.angle+dx/500f).coerceIn(-1.2f,1.2f));applyCamera()};x=e.x};true};MotionEvent.ACTION_UP->{if(down<dp(24)&&e.x-down>dp(45))openDrawer()else if(moved)save();true};else->true}}
+  val scale=ScaleGestureDetector(this,object:ScaleGestureDetector.SimpleOnScaleGestureListener(){override fun onScale(d:ScaleGestureDetector):Boolean{profile=profile.copy(zoom=(profile.zoom*d.scaleFactor).coerceIn(.65f,1.8f));applyCamera();return true};override fun onScaleEnd(d:ScaleGestureDetector){save()}})
+  avatar.setOnTouchListener{_,e->scale.onTouchEvent(e);when(e.actionMasked){MotionEvent.ACTION_DOWN->{x=e.x;down=e.x;moved=false;true};MotionEvent.ACTION_MOVE->{if(!scale.isInProgress){val dx=e.x-x;if(kotlin.math.abs(e.x-down)>dp(8)){moved=true;profile=profile.copy(angle=(profile.angle+dx/500f).coerceIn(-1.2f,1.2f));applyCamera()};x=e.x};true};MotionEvent.ACTION_UP->{if(down<dp(24)&&e.x-down>dp(45))openDrawer()else if(moved)save();true};else->true}}
  }
  override fun onRequestPermissionsResult(code:Int,permissions:Array<out String>,results:IntArray){
   super.onRequestPermissionsResult(code,permissions,results)
@@ -366,6 +403,6 @@ class AvatarTestActivity : Activity(), LabVoice.Events {
  }
  private fun java.io.InputStream.readBytesBounded(limit:Int):ByteArray{val out=java.io.ByteArrayOutputStream();val buffer=ByteArray(65536);var total=0;while(true){val n=read(buffer);if(n<0)break;total+=n;require(total<=limit);out.write(buffer,0,n)};return out.toByteArray()}
  override fun onResume(){super.onResume();foreground=true;if(resumedTurn)newTurn();resumedTurn=true;avatar.setResumed(true);lab.resumed(true);if(grantedMicRequest!=0){val request=grantedMicRequest;grantedMicRequest=0;startVoice(testOnly=request==85)}}
- override fun onPause(){foreground=false;previewDialog?.dismiss();previewDialog=null;interrupt();lab.resumed(false);avatar.setResumed(false);super.onPause()}
+ override fun onPause(){if(lab.busy)sayStatus("Przerwano odpowiedź po opuszczeniu rozmowy.");foreground=false;previewDialog?.dismiss();previewDialog=null;interrupt();lab.resumed(false);avatar.setResumed(false);super.onPause()}
  override fun onDestroy(){voiceDialog?.dismiss();voiceImportDialog?.dismiss();voice?.close();lab.destroy();io.shutdownNow();main.removeCallbacksAndMessages(null);super.onDestroy()}
 }

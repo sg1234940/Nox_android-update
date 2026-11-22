@@ -146,4 +146,23 @@ class AvatarLabClientTest {
         val e=assertThrows(LabFailure::class.java){client.run(server.url("/").toString(),"c",1,"x",{true},{},{executed++;JSONObject()})}
         assertEquals(16,executed);assertEquals(18,server.requestCount);assertTrue(e.message.orEmpty().contains("16 ruchów"))
     }
+    @Test fun twoSuccessiveVoiceTurnsReturnTextIncludingTheServersTextOnlyFallback() = fixture { server, client ->
+        val context = LabReplyVoice.forTurn(
+            LabPresentation(voiceId="local-"+"a".repeat(32)),
+            listOf(LabVoice.Voice("local-"+"a".repeat(32), "Żeński", "pl")), true
+        )!!.context()
+        for ((index, answer) in listOf("Pierwsza odpowiedź.", "Druga odpowiedź.").withIndex()) {
+            val rev = index + 1L
+            server.enqueue(advertised())
+            val done = final().replace("response-fixture", "reply-$rev").replace("Gotowe", answer)
+            server.enqueue(MockResponse().setBody(done+"\n"))
+            assertEquals(answer, client.run(server.url("/").toString(), "same-chat", rev, "pytanie $rev",
+                { true }, {}, { error("unexpected avatar command") }, context))
+            assertEquals("OPTIONS", server.takeRequest().method)
+            val post = JSONObject(server.takeRequest().body.readUtf8())
+            assertEquals("same-chat", post.getString("conversation_id"))
+            assertEquals(rev, post.getLong("transcript_revision"))
+        }
+        assertEquals(4, server.requestCount)
+    }
 }
